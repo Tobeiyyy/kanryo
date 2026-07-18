@@ -1,0 +1,60 @@
+/* Design tokens — light-first, teal accent, Space Grotesk.
+   Dark mode via [data-theme="dark"] on <html> (set pre-paint in index.html). */
+:root {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --elev: #fbfbfa;
+  --line: #e7e7e2;
+  --border: #d9d9d3;
+  --tx: #1b1b1d;
+  --tx2: #44444a;
+  --tx3: #77777e;
+  --tx4: #a2a2a8;
+  --accent: #0f9b8e;
+  --accent-press: #0c7f75;
+  --accent-soft: #e2f2f0;
+  --danger: #c94f3d;
+  --overlay-bg: rgba(20, 20, 22, 0.4);
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+  --font: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  /* per-project accent presets */
+  --p-teal: #0f9b8e; --p-coral: #e8734a; --p-violet: #8b6fd8; --p-blue: #3f83c9;
+  --p-amber: #d9962e; --p-rose: #d05f88; --p-green: #5da052; --p-slate: #7d8797;
+}
+
+[data-theme="dark"] {
+  --bg: #111113;
+  --surface: #1a1a1c;
+  --elev: #161618;
+  --line: #222224;
+  --border: #2c2c2e;
+  --tx: #e8e8ed;
+  --tx2: #d0d0d5;
+  --tx3: #8e8e93;
+  --tx4: #6e6e73;
+  --accent: #1fb5a6;
+  --accent-press: #17998c;
+  --accent-soft: #12312e;
+  --danger: #e06a56;
+  --overlay-bg: rgba(0, 0, 0, 0.55);
+  --shadow: none;
+  --p-teal: #1fb5a6; --p-coral: #ef8560; --p-violet: #a08ae4; --p-blue: #5f9bd9;
+  --p-amber: #e5ad52; --p-rose: #dd7ba0; --p-green: #74b369; --p-slate: #96a0b0;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--tx);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { font-weight: 700; letter-spacing: -0.3px; }
+button, input, textarea, select { font-family: inherit; }
+a { color: var(--accent); }
