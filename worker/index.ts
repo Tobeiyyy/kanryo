@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { authMiddleware, setAuthCookie, clearAuthCookie, hmac } from "./auth";
 import { projectRoutes, linkRoutes } from "./projects";
+import { taskRoutes, inboxRoutes } from "./tasks";
 
 export type Env = {
   DB: D1Database;
@@ -47,5 +48,7 @@ app.post("/api/auth/logout", (c) => {
 
 app.route("/api/projects", projectRoutes);
 app.route("/api/links", linkRoutes);
+app.route("/api/tasks", taskRoutes);
+app.route("/api/inbox", inboxRoutes);
 
 export default app;
