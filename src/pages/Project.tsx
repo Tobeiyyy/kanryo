@@ -1,3 +1,255 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { api, useCreateTask, usePatchTask, useProject } from "../api";
+import type { ProjectLink, Task, TaskStatus } from "../../shared/types";
+import TaskRow from "../components/TaskRow";
+import TaskDetail from "../components/TaskDetail";
+
+const STATUSES: TaskStatus[] = ["consider", "todo", "done"];
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  consider: "To consider", todo: "To do", done: "Done",
+};
+const ACCENTS = ["teal", "coral", "violet", "blue", "amber", "rose", "green", "slate"];
+const KINDS = ["repo", "live", "storage", "claude", "other"];
+const KIND_ICONS: Record<string, string> = {
+  repo: "⌥", live: "🌐", storage: "🗄", claude: "✳", other: "🔗",
+};
+
+function useMediaQuery(qs: string): boolean {
+  const [m, setM] = useState(() => matchMedia(qs).matches);
+  useEffect(() => {
+    const mq = matchMedia(qs);
+    const fn = () => setM(mq.matches);
+    mq.addEventListener("change", fn);
+    return () => mq.removeEventListener("change", fn);
+  }, [qs]);
+  return m;
+}
+
 export default function Project() {
-  return <h1>Project</h1>;
+  const { id } = useParams();
+  const q = useProject(id);
+  const patch = usePatchTask();
+  const create = useCreateTask();
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const isDesktop = useMediaQuery("(min-width: 900px)");
+  const [tab, setTab] = useState<TaskStatus>("todo");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [labelFilter, setLabelFilter] = useState<string[]>([]);
+  const [prioFilter, setPrioFilter] = useState<number | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [newTask, setNewTask] = useState("");
+  const [newLink, setNewLink] = useState({ label: "", url: "", kind: "other" });
+
+  if (!q.data) return null;
+  const { project, links, tasks } = q.data;
+  const topLevel = tasks.filter((t) => t.parent_id === null);
+  const subsOf = (t: Task) => tasks.filter((s) => s.parent_id === t.id);
+  const allLabels = [...new Set(topLevel.flatMap((t) => t.labels))].sort();
+  const selected = tasks.find((t) => t.id === selectedId) ?? null;
+
+  const visible = (status: TaskStatus) =>
+    topLevel
+      .filter((t) => t.status === status)
+      .filter((t) => labelFilter.length === 0 || labelFilter.every((l) => t.labels.includes(l)))
+      .filter((t) => prioFilter === null || t.priority === prioFilter)
+      .sort((a, b) => a.position - b.position || a.id - b.id);
+
+  function patchProject(fields: Record<string, unknown>) {
+    void api(`/api/projects/${project.id}`, { method: "PATCH", body: JSON.stringify(fields) })
+      .then(() => {
+        void qc.invalidateQueries({ queryKey: ["project", id] });
+        void qc.invalidateQueries({ queryKey: ["projects"] });
+      });
+  }
+
+  function dropOnColumn(taskId: number, status: TaskStatus) {
+    const t = tasks.find((x) => x.id === taskId);
+    if (!t || t.status === status) return;
+    const maxPos = Math.max(-1, ...visible(status).map((x) => x.position));
+    patch.mutate({ id: taskId, patch: { status, position: maxPos + 1 } });
+  }
+
+  function dropOnRow(dragId: number, target: Task) {
+    const t = tasks.find((x) => x.id === dragId);
+    if (!t) return;
+    if (t.status !== target.status) { dropOnColumn(dragId, target.status); return; }
+    const ids = visible(target.status).map((x) => x.id).filter((x) => x !== dragId);
+    ids.splice(ids.indexOf(target.id), 0, dragId);
+    // optimistic: reflect new order immediately
+    qc.setQueryData(["project", id], (old: typeof q.data) => old && {
+      ...old,
+      tasks: old.tasks.map((x) => ids.includes(x.id) ? { ...x, position: ids.indexOf(x.id) } : x),
+    });
+    void api("/api/tasks/positions", {
+      method: "POST",
+      body: JSON.stringify({ project_id: project.id, status: target.status, ids }),
+    }).then(() => qc.invalidateQueries({ queryKey: ["project", id] }));
+  }
+
+  function addTask(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newTask.trim()) return;
+    create.mutate({ title: newTask.trim(), project_id: project.id, status: isDesktop ? "todo" : tab });
+    setNewTask("");
+  }
+
+  function addLink(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newLink.label.trim() || !newLink.url.trim()) return;
+    void api(`/api/projects/${project.id}/links`, { method: "POST", body: JSON.stringify(newLink) })
+      .then(() => {
+        setNewLink({ label: "", url: "", kind: "other" });
+        void qc.invalidateQueries({ queryKey: ["project", id] });
+      });
+  }
+
+  function renderColumn(status: TaskStatus) {
+    return (
+      <Column
+        key={status} status={status} label={STATUS_LABELS[status]}
+        tasks={visible(status)} onDrop={dropOnColumn}
+        render={(t) => (
+          <div key={t.id}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onDrop={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              dropOnRow(Number(e.dataTransfer.getData("text/plain")), t);
+            }}>
+            <TaskRow task={t} subtasks={subsOf(t)} onOpen={(x) => setSelectedId(x.id)} draggable={isDesktop} />
+          </div>
+        )}
+      />
+    );
+  }
+
+  return (
+    <div>
+      <header className="proj-header">
+        <h1>
+          {project.icon ? `${project.icon} ` : ""}{project.name}
+          <button className="icon-btn" title="Edit project" onClick={() => setEditing(!editing)}>✎</button>
+        </h1>
+        {project.description && <p className="proj-desc">{project.description}</p>}
+        <div className="link-chips">
+          {(links as ProjectLink[]).map((l) => (
+            <a key={l.id} className="link-chip" href={l.url} target="_blank" rel="noreferrer">
+              <span>{KIND_ICONS[l.kind]}</span> {l.label}
+            </a>
+          ))}
+        </div>
+      </header>
+
+      {editing && (
+        <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+          <div className="settings-row">
+            <input className="input" style={{ maxWidth: 220 }} defaultValue={project.name}
+              onBlur={(e) => e.target.value.trim() && e.target.value !== project.name && patchProject({ name: e.target.value.trim() })} />
+            <input className="input" style={{ maxWidth: 70 }} placeholder="icon" defaultValue={project.icon ?? ""}
+              onBlur={(e) => (e.target.value || null) !== project.icon && patchProject({ icon: e.target.value || null })} />
+            {ACCENTS.map((a) => (
+              <span key={a} className={`accent-dot ${project.accent === a ? "on" : ""}`}
+                style={{ background: `var(--p-${a})` }} onClick={() => patchProject({ accent: a })} />
+            ))}
+          </div>
+          <textarea className="input" rows={2} placeholder="Description" defaultValue={project.description ?? ""}
+            onBlur={(e) => (e.target.value || null) !== project.description && patchProject({ description: e.target.value || null })} />
+          <form className="settings-row" style={{ marginTop: 10 }} onSubmit={addLink}>
+            <input className="input" style={{ maxWidth: 140 }} placeholder="Link label" value={newLink.label}
+              onChange={(e) => setNewLink({ ...newLink, label: e.target.value })} />
+            <input className="input" style={{ maxWidth: 240 }} placeholder="https://…" value={newLink.url}
+              onChange={(e) => setNewLink({ ...newLink, url: e.target.value })} />
+            <select className="input" style={{ maxWidth: 110 }} value={newLink.kind}
+              onChange={(e) => setNewLink({ ...newLink, kind: e.target.value })}>
+              {KINDS.map((k) => <option key={k}>{k}</option>)}
+            </select>
+            <button className="btn" type="submit">Add link</button>
+          </form>
+          {(links as ProjectLink[]).map((l) => (
+            <div key={l.id} className="settings-row">
+              <span style={{ fontSize: 13, color: "var(--tx3)" }}>{l.label} — {l.url}</span>
+              <button className="icon-btn" onClick={() =>
+                api(`/api/links/${l.id}`, { method: "DELETE" }).then(() =>
+                  qc.invalidateQueries({ queryKey: ["project", id] }))}>✕</button>
+            </div>
+          ))}
+          <div className="settings-row" style={{ marginTop: 10 }}>
+            <button className="btn" onClick={() => patchProject({ status: project.status === "active" ? "archived" : "active" })}>
+              {project.status === "active" ? "Archive" : "Unarchive"}
+            </button>
+            <button className="btn btn-danger" onClick={() => {
+              if (confirm(`Delete "${project.name}" and all its tasks?`)) {
+                void api(`/api/projects/${project.id}`, { method: "DELETE" }).then(() => navigate("/"));
+              }
+            }}>Delete project</button>
+          </div>
+        </div>
+      )}
+
+      {(allLabels.length > 0 || prioFilter !== null || labelFilter.length > 0) && (
+        <div className="filter-bar">
+          {allLabels.map((l) => (
+            <button key={l} className={`chip ${labelFilter.includes(l) ? "on" : ""}`}
+              onClick={() => setLabelFilter(labelFilter.includes(l) ? labelFilter.filter((x) => x !== l) : [...labelFilter, l])}>
+              {l}
+            </button>
+          ))}
+          {[3, 2, 1].map((p) => (
+            <button key={p} className={`chip ${prioFilter === p ? "on" : ""}`}
+              onClick={() => setPrioFilter(prioFilter === p ? null : p)}>
+              P{p}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <form className="quickadd" onSubmit={addTask}>
+        <input className="input" placeholder="Add a task…" value={newTask} onChange={(e) => setNewTask(e.target.value)} />
+        <button className="btn btn-primary" type="submit">Add</button>
+      </form>
+
+      {isDesktop ? (
+        <div className="board">{STATUSES.map(renderColumn)}</div>
+      ) : (
+        <>
+          <div className="seg">
+            {STATUSES.map((s) => (
+              <button key={s} className={tab === s ? "on" : ""} onClick={() => setTab(s)}>
+                {STATUS_LABELS[s]} ({visible(s).length})
+              </button>
+            ))}
+          </div>
+          {visible(tab).map((t) => (
+            <TaskRow key={t.id} task={t} subtasks={subsOf(t)} onOpen={(x) => setSelectedId(x.id)} />
+          ))}
+        </>
+      )}
+
+      {selected && (
+        <TaskDetail task={selected} subtasks={subsOf(selected)} onClose={() => setSelectedId(null)} />
+      )}
+    </div>
+  );
+}
+
+function Column({ label, status, tasks, onDrop, render }: {
+  status: TaskStatus; label: string; tasks: Task[];
+  onDrop: (taskId: number, status: TaskStatus) => void;
+  render: (t: Task) => React.ReactNode;
+}) {
+  const [over, setOver] = useState(false);
+  return (
+    <div className={`column ${over ? "drop" : ""}`}
+      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault(); setOver(false);
+        onDrop(Number(e.dataTransfer.getData("text/plain")), status);
+      }}>
+      <h4>{label} ({tasks.length})</h4>
+      {tasks.map(render)}
+    </div>
+  );
 }
