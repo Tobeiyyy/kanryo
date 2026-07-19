@@ -3,6 +3,7 @@ import { authMiddleware, setAuthCookie, clearAuthCookie, hmac } from "./auth";
 import { projectRoutes, linkRoutes } from "./projects";
 import { taskRoutes, inboxRoutes } from "./tasks";
 import { gcalRoutes } from "./gcalRoutes";
+import { mcpRoutes } from "./mcp";
 
 export type Env = {
   DB: D1Database;
@@ -53,5 +54,6 @@ app.route("/api/links", linkRoutes);
 app.route("/api/tasks", taskRoutes);
 app.route("/api/inbox", inboxRoutes);
 app.route("/api/gcal", gcalRoutes);
+app.route("/mcp", mcpRoutes);
 
 export default app;
