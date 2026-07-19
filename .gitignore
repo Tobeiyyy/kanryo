@@ -3,3 +3,4 @@ dist
 .wrangler
 .dev.vars
 tsconfig.tsbuildinfo
+gcal-key.json
