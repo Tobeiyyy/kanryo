@@ -11,6 +11,7 @@ export type Env = {
   AUTH_SECRET: string;
   GCAL_CLIENT_EMAIL: string;
   GCAL_PRIVATE_KEY: string;
+  KANRYO_TOKEN: string;
 };
 
 export type App = Hono<{ Bindings: Env }>;

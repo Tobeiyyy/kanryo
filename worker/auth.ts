@@ -28,6 +28,16 @@ export async function verifyToken(secret: string, token: string): Promise<boolea
   return Number.isFinite(exp) && exp > Date.now();
 }
 
+/** Timing-safe bearer-token check (HMAC-digest comparison, same trick as login). */
+export async function bearerMatches(
+  header: string | undefined, expected: string, secret: string,
+): Promise<boolean> {
+  if (!header?.startsWith("Bearer ") || !expected) return false;
+  const supplied = header.slice(7);
+  const [a, b] = await Promise.all([hmac(secret, supplied), hmac(secret, expected)]);
+  return a === b;
+}
+
 const MAX_AGE_S = 180 * 24 * 3600;
 const COOKIE = "kanryo_auth";
 
@@ -45,6 +55,9 @@ export function clearAuthCookie(c: any) {
 export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
   const path = new URL(c.req.url).pathname;
   if (path === "/api/auth/login" || path === "/api/health") return next();
+  if (await bearerMatches(c.req.header("authorization"), c.env.KANRYO_TOKEN ?? "", c.env.AUTH_SECRET)) {
+    return next();
+  }
   const token = getCookie(c, COOKIE);
   if (!token || !(await verifyToken(c.env.AUTH_SECRET, token))) {
     return c.json({ error: "unauthorized" }, 401);

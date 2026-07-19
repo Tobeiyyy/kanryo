@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hmac, signToken, verifyToken } from "../worker/auth";
+import { bearerMatches, hmac, signToken, verifyToken } from "../worker/auth";
 
 const SECRET = "test-secret";
 
@@ -27,5 +27,19 @@ describe("auth tokens", () => {
   it("hmac is deterministic and secret-dependent", async () => {
     expect(await hmac(SECRET, "abc")).toBe(await hmac(SECRET, "abc"));
     expect(await hmac(SECRET, "abc")).not.toBe(await hmac("other", "abc"));
+  });
+});
+
+describe("bearerMatches", () => {
+  it("accepts the exact token", async () => {
+    expect(await bearerMatches("Bearer tok123", "tok123", SECRET)).toBe(true);
+  });
+  it("rejects wrong token, missing header, non-bearer header", async () => {
+    expect(await bearerMatches("Bearer nope", "tok123", SECRET)).toBe(false);
+    expect(await bearerMatches(undefined, "tok123", SECRET)).toBe(false);
+    expect(await bearerMatches("Basic tok123", "tok123", SECRET)).toBe(false);
+  });
+  it("rejects everything when no token is configured", async () => {
+    expect(await bearerMatches("Bearer ", "", SECRET)).toBe(false);
   });
 });
