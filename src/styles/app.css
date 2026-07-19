@@ -152,6 +152,8 @@
 .accent-dot { width: 22px; height: 22px; border-radius: 99px; cursor: pointer; border: 2px solid transparent; }
 .accent-dot.on { border-color: var(--tx); }
 
+button.link-chip { cursor: pointer; font-size: 13px; }
+
 /* --- mobile nav at bottom --- */
 @media (max-width: 899px) {
   .nav { position: fixed; top: auto; bottom: 0; width: 100%; border-top: 1px solid var(--line); border-bottom: none; padding-bottom: max(10px, env(safe-area-inset-bottom)); }

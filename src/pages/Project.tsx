@@ -134,11 +134,7 @@ export default function Project() {
         </h1>
         {project.description && <p className="proj-desc">{project.description}</p>}
         <div className="link-chips">
-          {(links as ProjectLink[]).map((l) => (
-            <a key={l.id} className="link-chip" href={l.url} target="_blank" rel="noreferrer">
-              <span>{KIND_ICONS[l.kind]}</span> {l.label}
-            </a>
-          ))}
+          {(links as ProjectLink[]).map((l) => <LinkChip key={l.id} link={l} />)}
         </div>
       </header>
 
@@ -231,6 +227,33 @@ export default function Project() {
         <TaskDetail task={selected} subtasks={subsOf(selected)} onClose={() => setSelectedId(null)} />
       )}
     </div>
+  );
+}
+
+function LinkChip({ link }: { link: ProjectLink }) {
+  const [copied, setCopied] = useState(false);
+  // Scheme of 2+ chars: "C:" is a Windows drive prefix, not a scheme. file: is blocked by browsers anyway.
+  const navigable = /^[a-z][a-z0-9+.-]+:/i.test(link.url) && !/^file:/i.test(link.url);
+  if (navigable) {
+    return (
+      <a className="link-chip" href={link.url} target="_blank" rel="noreferrer">
+        <span>{KIND_ICONS[link.kind]}</span> {link.label}
+      </a>
+    );
+  }
+  return (
+    <button
+      className="link-chip"
+      title={`Copy: ${link.url}`}
+      onClick={() => {
+        void navigator.clipboard.writeText(link.url).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1000);
+        }).catch(() => {});
+      }}
+    >
+      <span>{KIND_ICONS[link.kind]}</span> {copied ? "copied!" : link.label}
+    </button>
   );
 }
 
