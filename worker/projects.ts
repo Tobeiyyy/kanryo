@@ -7,8 +7,8 @@ type HonoEnv = { Bindings: Env };
 export const projectRoutes = new Hono<HonoEnv>();
 export const linkRoutes = new Hono<HonoEnv>();
 
-const ACCENTS = ["teal", "coral", "violet", "blue", "amber", "rose", "green", "slate"];
-const KINDS = ["repo", "live", "storage", "claude", "other"];
+export const ACCENTS = ["teal", "coral", "violet", "blue", "amber", "rose", "green", "slate"];
+export const KINDS = ["repo", "live", "storage", "claude", "other"];
 
 /** Fetch labels for a set of task rows and attach them as `labels: string[]`. */
 export async function attachLabels(db: D1Database, tasks: any[]): Promise<any[]> {

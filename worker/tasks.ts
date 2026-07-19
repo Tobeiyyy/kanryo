@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import type { Env } from "./index";
 import { buildTaskPatch, defaultStatus, touchesGcal, STATUSES, type TaskPatchBody } from "./taskLogic";
 import { queueOrphanFlush, queueSync } from "./gcal";
@@ -16,10 +17,16 @@ inboxRoutes.get("/", async (c) => {
   return c.json(await attachLabels(c.env.DB, results));
 });
 
-taskRoutes.post("/", async (c) => {
-  const body = await c.req.json<TaskPatchBody & { title?: string }>();
+export type CreateTaskBody = TaskPatchBody & { title?: string };
+
+/** Shared insert path for the REST route and the MCP tools — one source of truth
+    for validation, status default, born-dirty gcal flag, position, labels, sync. */
+export async function createTask(
+  c: Context<{ Bindings: Env }>, body: CreateTaskBody,
+): Promise<{ task?: any; error?: string }> {
   const title = body.title?.trim();
-  if (!title) return c.json({ error: "title required" }, 400);
+  if (!title) return { error: "title required" };
+  if (body.status !== undefined && !STATUSES.includes(body.status)) return { error: "bad status" };
   const status = defaultStatus(body);
   // due date present -> event desired -> born dirty (failure state precedes the sync attempt)
   const dirty = body.due_date ? 1 : 0;
@@ -38,7 +45,13 @@ taskRoutes.post("/", async (c) => {
     ));
   }
   if (dirty) queueSync(c, row.id);
-  return c.json({ ...row, labels: body.labels ?? [] }, 201);
+  return { task: { ...row, labels: body.labels ?? [] } };
+}
+
+taskRoutes.post("/", async (c) => {
+  const result = await createTask(c, await c.req.json<CreateTaskBody>());
+  if (result.error) return c.json({ error: result.error }, 400);
+  return c.json(result.task, 201);
 });
 
 taskRoutes.post("/positions", async (c) => {
