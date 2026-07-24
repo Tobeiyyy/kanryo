@@ -10,6 +10,7 @@ export interface Project {
   accent: AccentKey;
   icon: string | null;
   status: "active" | "archived";
+  completed_at: string | null;
   created_at: string;
 }
 

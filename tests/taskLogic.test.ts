@@ -1,20 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { buildTaskPatch, defaultStatus, touchesGcal } from "../worker/taskLogic";
 
-describe("defaultStatus (spec: status-default rule)", () => {
-  it("project task defaults to todo", () => {
-    expect(defaultStatus({ project_id: 3 })).toBe("todo");
-  });
-  it("inbox task defaults to consider", () => {
+describe("defaultStatus (everything starts in consider unless told otherwise)", () => {
+  it("defaults to consider, with or without a project", () => {
+    expect(defaultStatus({ project_id: 3 })).toBe("consider");
     expect(defaultStatus({})).toBe("consider");
     expect(defaultStatus({ project_id: null })).toBe("consider");
   });
   it("explicit status wins", () => {
-    expect(defaultStatus({ project_id: 3, status: "consider" })).toBe("consider");
+    expect(defaultStatus({ project_id: 3, status: "todo" })).toBe("todo");
     expect(defaultStatus({ status: "done" })).toBe("done");
   });
-  it("invalid explicit status falls back to the rule", () => {
-    expect(defaultStatus({ project_id: 3, status: "bogus" })).toBe("todo");
+  it("invalid explicit status falls back to consider", () => {
+    expect(defaultStatus({ project_id: 3, status: "bogus" })).toBe("consider");
   });
 });
 

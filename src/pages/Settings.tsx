@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, useGcalStatus, useProjects } from "../api";
+import { api, useGcalStatus } from "../api";
 import { getThemePref, setThemePref, type ThemePref } from "../theme";
 
 export default function Settings() {
   const gcal = useGcalStatus();
-  const archived = useProjects(true);
   const qc = useQueryClient();
   const [pref, setPref] = useState<ThemePref>(getThemePref());
   const [calId, setCalId] = useState("");
@@ -92,22 +91,6 @@ export default function Settings() {
           </p>
         )}
       </section>
-
-      {(archived.data?.length ?? 0) > 0 && (
-        <section className="card settings-section">
-          <h2>Archived projects</h2>
-          {archived.data!.map((p) => (
-            <div key={p.id} className="settings-row">
-              <span>{p.icon ? `${p.icon} ` : ""}{p.name}</span>
-              <button className="btn" onClick={() =>
-                api(`/api/projects/${p.id}`, { method: "PATCH", body: JSON.stringify({ status: "active" }) })
-                  .then(() => { void qc.invalidateQueries({ queryKey: ["projects"] }); })}>
-                Unarchive
-              </button>
-            </div>
-          ))}
-        </section>
-      )}
 
       <section className="card settings-section">
         <h2>Session</h2>

@@ -20,7 +20,7 @@ const TASK_ITEM_SCHEMA = {
   type: "object",
   properties: {
     title: { type: "string" },
-    status: { type: "string", enum: ["consider", "todo"], description: "consider = the user still wants to think it through (usually by talking it over with Claude) or hasn't committed to doing it; todo = already discussed and decided, just needs doing. Omit for the default (todo)." },
+    status: { type: "string", enum: ["consider", "todo"], description: "consider = the user still wants to think it through (usually by talking it over with Claude) or hasn't committed to doing it; todo = already discussed and decided in this conversation, just needs doing. DEFAULT IS consider — pass todo explicitly for work the user has actually decided on." },
     priority: { type: "integer", minimum: 0, maximum: 3 },
     due_date: { type: "string", description: "YYYY-MM-DD — the day the user wants this on their calendar" },
     due_time: { type: "string", description: "HH:MM, only with due_date" },
@@ -71,7 +71,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "create_project",
-    description: "Create a new Kanryo project, optionally seeded with tasks and links. Offer this when a conversation has produced a concrete project-worthy idea — ask the user before calling. Seeded task statuses: consider for unvetted ideas, todo for agreed actions.",
+    description: "Create a new Kanryo project, optionally seeded with tasks and links. Offer this when a conversation has produced a concrete project-worthy idea — ask the user before calling. Seeded tasks default to consider; pass status 'todo' only for steps the user actually decided on in the conversation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -87,7 +87,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "add_tasks",
-    description: "Add tasks to an existing Kanryo project (get project_id from list_projects). Offer this when discussion surfaces new actionable work for something already tracked — ask the user before calling. Decided work goes in as todo; things the user still wants to think through go in as consider.",
+    description: "Add tasks to an existing Kanryo project (get project_id from list_projects). Offer this when discussion surfaces new actionable work for something already tracked — ask the user before calling. Tasks default to consider; pass status 'todo' only for work the user has actually decided on.",
     inputSchema: {
       type: "object",
       properties: { project_id: { type: "integer" }, tasks: { type: "array", items: TASK_ITEM_SCHEMA } },

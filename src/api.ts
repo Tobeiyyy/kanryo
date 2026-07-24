@@ -14,10 +14,10 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function useProjects(archived = false) {
+export function useProjects(view: "active" | "completed" = "active") {
   return useQuery({
-    queryKey: ["projects", archived],
-    queryFn: () => api<ProjectSummary[]>(`/api/projects${archived ? "?archived=1" : ""}`),
+    queryKey: ["projects", view],
+    queryFn: () => api<ProjectSummary[]>(`/api/projects${view === "completed" ? "?completed=1" : ""}`),
   });
 }
 

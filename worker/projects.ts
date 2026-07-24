@@ -27,19 +27,20 @@ export async function attachLabels(db: D1Database, tasks: any[]): Promise<any[]>
 }
 
 projectRoutes.get("/", async (c) => {
-  const status = c.req.query("archived") === "1" ? "archived" : "active";
+  // Completion replaced archiving: active = not yet completed, completed = finished.
+  const completed = c.req.query("completed") === "1";
   const { results } = await c.env.DB.prepare(
-    `SELECT p.id, p.name, p.description, p.accent, p.icon, p.status, p.created_at,
+    `SELECT p.id, p.name, p.description, p.accent, p.icon, p.status, p.completed_at, p.created_at,
        COUNT(CASE WHEN t.status = 'consider' AND t.parent_id IS NULL THEN 1 END) AS consider_count,
        COUNT(CASE WHEN t.status = 'todo' AND t.parent_id IS NULL THEN 1 END) AS todo_count,
        COUNT(CASE WHEN t.status = 'done' AND t.parent_id IS NULL THEN 1 END) AS done_count,
        MIN(CASE WHEN t.status != 'done' THEN t.due_date END) AS next_due,
        COALESCE(MAX(t.updated_at), p.created_at) AS last_activity
      FROM projects p LEFT JOIN tasks t ON t.project_id = p.id
-     WHERE p.status = ?
+     WHERE p.completed_at IS ${completed ? "NOT NULL" : "NULL"}
      GROUP BY p.id
-     ORDER BY last_activity DESC`,
-  ).bind(status).all();
+     ORDER BY ${completed ? "p.completed_at DESC" : "last_activity DESC"}`,
+  ).all();
   return c.json(results);
 });
 
@@ -78,6 +79,10 @@ projectRoutes.patch("/:id", async (c) => {
   const values: unknown[] = [];
   for (const f of PROJECT_FIELDS) {
     if (f in body) { sets.push(`${f} = ?`); values.push(body[f]); }
+  }
+  // {"completed": true} stamps the finish time; false reopens the project.
+  if ("completed" in body) {
+    sets.push(`completed_at = ${body.completed ? "datetime('now')" : "NULL"}`);
   }
   if (sets.length === 0) return c.json({ error: "empty patch" }, 400);
   const row = await c.env.DB.prepare(

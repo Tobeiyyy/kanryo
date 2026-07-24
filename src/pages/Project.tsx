@@ -92,7 +92,9 @@ export default function Project() {
   function addTask(e: React.FormEvent) {
     e.preventDefault();
     if (!newTask.trim()) return;
-    create.mutate({ title: newTask.trim(), project_id: project.id, status: isDesktop ? "todo" : tab });
+    // Desktop shows all three columns, so a new task starts in "to consider" (the default);
+    // on mobile it lands in whichever column you're looking at, or it would vanish from view.
+    create.mutate({ title: newTask.trim(), project_id: project.id, status: isDesktop ? "consider" : tab });
     setNewTask("");
   }
 
@@ -172,8 +174,8 @@ export default function Project() {
             </div>
           ))}
           <div className="settings-row" style={{ marginTop: 10 }}>
-            <button className="btn" onClick={() => patchProject({ status: project.status === "active" ? "archived" : "active" })}>
-              {project.status === "active" ? "Archive" : "Unarchive"}
+            <button className="btn" onClick={() => patchProject({ completed: !project.completed_at })}>
+              {project.completed_at ? "Reopen project" : "Mark complete"}
             </button>
             <button className="btn btn-danger" onClick={() => {
               if (confirm(`Delete "${project.name}" and all its tasks?`)) {

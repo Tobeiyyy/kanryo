@@ -15,12 +15,16 @@ export type TaskPatchBody = {
   labels?: string[];
 };
 
-/** Spec rule: created with project_id → todo; without → consider. Valid explicit status wins. */
+/**
+ * Everything lands in `consider` unless it explicitly says otherwise: most captured things
+ * still need a conversation before they are real work. Only a caller that knows the task was
+ * already decided passes `todo`.
+ */
 export function defaultStatus(body: { project_id?: number | null; status?: string }): TaskStatus {
   if (body.status && (STATUSES as readonly string[]).includes(body.status)) {
     return body.status as TaskStatus;
   }
-  return body.project_id != null ? "todo" : "consider";
+  return "consider";
 }
 
 const PATCHABLE = [
