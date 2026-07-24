@@ -21,7 +21,8 @@ describe("handleRpc", () => {
   it("tools/list returns the capture and lifecycle tools", async () => {
     const res: any = await handleRpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, call);
     expect(res.result.tools.map((t: any) => t.name).sort()).toEqual(
-      ["add_inbox_item", "add_links", "add_tasks", "create_project", "list_projects", "list_tasks", "set_task_status"]);
+      ["add_inbox_item", "add_links", "add_tasks", "create_project", "delete_tasks",
+       "list_projects", "list_tasks", "set_task_status", "update_task"]);
     for (const t of res.result.tools) {
       expect(typeof t.description).toBe("string");
       expect(t.inputSchema.type).toBe("object");
@@ -50,6 +51,16 @@ describe("handleRpc", () => {
     const tool = TOOL_DEFS.find((t) => t.name === "set_task_status")!;
     expect((tool.inputSchema.properties as any).status.enum).toEqual(["consider", "todo", "done"]);
     expect(tool.inputSchema.required).toEqual(["task_ids", "status"]);
+  });
+  it("update_task takes only a task_id as required, edits are presence-based", () => {
+    const tool = TOOL_DEFS.find((t) => t.name === "update_task")!;
+    expect(tool.inputSchema.required).toEqual(["task_id"]);
+    expect(Object.keys(tool.inputSchema.properties as any).sort()).toEqual(
+      ["due_date", "due_time", "notes", "priority", "task_id", "title"]);
+  });
+  it("delete_tasks warns that it is permanent", () => {
+    const tool = TOOL_DEFS.find((t) => t.name === "delete_tasks")!;
+    expect(tool.description).toMatch(/PERMANENTLY|Irreversible/i);
   });
   it("unknown method -> -32601", async () => {
     const res: any = await handleRpc({ jsonrpc: "2.0", id: 6, method: "resources/list" }, call);

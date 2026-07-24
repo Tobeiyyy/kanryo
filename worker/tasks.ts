@@ -108,8 +108,14 @@ taskRoutes.patch("/:id", async (c) => {
   return c.json(result.task);
 });
 
-taskRoutes.delete("/:id", async (c) => {
-  const id = Number(c.req.param("id"));
+/** Shared delete path for the REST route and the MCP tools. Reports the removed row so
+    callers can echo what went away; returns an error when the id doesn't exist. */
+export async function deleteTask(
+  c: Context<{ Bindings: Env }>, id: number,
+): Promise<{ task?: { id: number; title: string }; error?: string }> {
+  const row = await c.env.DB.prepare("SELECT id, title FROM tasks WHERE id = ?")
+    .bind(id).first<{ id: number; title: string }>();
+  if (!row) return { error: "not found" };
   // Tombstone the event ids of this task AND its descendants (cascade will delete their rows)
   // in the same batch as the delete itself — spec: failure state written first.
   await c.env.DB.batch([
@@ -125,5 +131,10 @@ taskRoutes.delete("/:id", async (c) => {
     c.env.DB.prepare("DELETE FROM tasks WHERE id = ?").bind(id),
   ]);
   queueOrphanFlush(c);
+  return { task: row };
+}
+
+taskRoutes.delete("/:id", async (c) => {
+  await deleteTask(c, Number(c.req.param("id")));
   return c.json({ ok: true });
 });

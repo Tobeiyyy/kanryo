@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Env } from "./index";
 import { hmac } from "./auth";
-import { createTask, patchTask } from "./tasks";
+import { createTask, deleteTask, patchTask } from "./tasks";
 import { ACCENTS, KINDS } from "./projects";
 
 export type RpcMessage = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
@@ -101,6 +101,31 @@ export const TOOL_DEFS = [
       type: "object",
       properties: { project_id: { type: "integer" }, links: { type: "array", items: LINK_ITEM_SCHEMA } },
       required: ["project_id", "links"],
+    },
+  },
+  {
+    name: "update_task",
+    description: "Edit an existing Kanryo task's text or scheduling — title, notes, priority, due date/time. Presence-based: only the fields you pass change, everything else is left alone. Use this to fix a wording, sharpen a vague task, or add notes from a conversation, instead of creating a near-duplicate. For moving between consider/todo/done use set_task_status. Get task_id from list_tasks. Offer before calling.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "integer" },
+        title: { type: "string" },
+        notes: { type: ["string", "null"] },
+        priority: { type: "integer", minimum: 0, maximum: 3 },
+        due_date: { type: ["string", "null"], description: "YYYY-MM-DD, or null to clear (which also removes the calendar event)" },
+        due_time: { type: ["string", "null"], description: "HH:MM, or null to clear" },
+      },
+      required: ["task_id"],
+    },
+  },
+  {
+    name: "delete_tasks",
+    description: "PERMANENTLY delete Kanryo tasks (and their subtasks). Irreversible — always confirm with the user first, quoting the exact titles. Use only for genuine duplicates, mistakes, or things the user decided against; work that actually got finished belongs in done via set_task_status, not deleted. Get task_ids from list_tasks.",
+    inputSchema: {
+      type: "object",
+      properties: { task_ids: { type: "array", items: { type: "integer" } } },
+      required: ["task_ids"],
     },
   },
   {
@@ -257,6 +282,28 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
         updated.push({ id: r.task.id, title: r.task.title, status: r.task.status });
       }
       return { updated_count: updated.length, tasks: updated };
+    }
+    case "update_task": {
+      if (typeof args.task_id !== "number") throw new ToolError("task_id is required — get it from list_tasks");
+      const patch: Record<string, unknown> = {};
+      for (const f of ["title", "notes", "priority", "due_date", "due_time"]) {
+        if (f in args) patch[f] = args[f];
+      }
+      if (Object.keys(patch).length === 0) throw new ToolError("pass at least one field to change");
+      const r = await patchTask(c, args.task_id, patch);
+      if (r.error) throw new ToolError(`task ${args.task_id}: ${r.error}`);
+      return { task: r.task };
+    }
+    case "delete_tasks": {
+      const ids = Array.isArray(args.task_ids) ? args.task_ids.filter((x: unknown) => typeof x === "number") : [];
+      if (ids.length === 0) throw new ToolError("task_ids must contain at least one task id — get them from list_tasks");
+      const deleted: any[] = [];
+      for (const id of ids) {
+        const r = await deleteTask(c, id);
+        if (r.error) throw new ToolError(`task ${id}: ${r.error}`);
+        deleted.push(r.task);
+      }
+      return { deleted_count: deleted.length, tasks: deleted };
     }
     case "add_inbox_item": {
       const r = await createTask(c, { title: args.title });
