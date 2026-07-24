@@ -69,10 +69,12 @@ taskRoutes.post("/positions", async (c) => {
   return c.json({ ok: true });
 });
 
-taskRoutes.patch("/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  const body = await c.req.json<TaskPatchBody>();
-  if ("status" in body && !STATUSES.includes(body.status!)) return c.json({ error: "bad status" }, 400);
+/** Shared update path for the REST route and the MCP tools — presence-based patch,
+    gcal dirty-first flagging, label replacement. Mirrors createTask. */
+export async function patchTask(
+  c: Context<{ Bindings: Env }>, id: number, body: TaskPatchBody,
+): Promise<{ task?: any; error?: string }> {
+  if ("status" in body && !STATUSES.includes(body.status!)) return { error: "bad status" };
   const { sets, values, labels } = buildTaskPatch(body);
   const dirty = touchesGcal(body);
   if (dirty) sets.push("gcal_dirty = 1");
@@ -80,7 +82,7 @@ taskRoutes.patch("/:id", async (c) => {
   const row = await c.env.DB.prepare(
     `UPDATE tasks SET ${sets.join(", ")} WHERE id = ? RETURNING *`,
   ).bind(...values, id).first<any>();
-  if (!row) return c.json({ error: "not found" }, 404);
+  if (!row) return { error: "not found" };
   if (labels !== undefined) {
     await c.env.DB.batch([
       c.env.DB.prepare("DELETE FROM task_labels WHERE task_id = ?").bind(id),
@@ -89,7 +91,13 @@ taskRoutes.patch("/:id", async (c) => {
   }
   if (dirty) queueSync(c, id);
   const [withLabels] = await attachLabels(c.env.DB, [row]);
-  return c.json(withLabels);
+  return { task: withLabels };
+}
+
+taskRoutes.patch("/:id", async (c) => {
+  const result = await patchTask(c, Number(c.req.param("id")), await c.req.json<TaskPatchBody>());
+  if (result.error) return c.json({ error: result.error }, result.error === "not found" ? 404 : 400);
+  return c.json(result.task);
 });
 
 taskRoutes.delete("/:id", async (c) => {

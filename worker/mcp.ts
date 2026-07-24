@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Env } from "./index";
 import { hmac } from "./auth";
-import { createTask } from "./tasks";
+import { createTask, patchTask } from "./tasks";
 import { ACCENTS, KINDS } from "./projects";
 
 export type RpcMessage = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
@@ -20,7 +20,7 @@ const TASK_ITEM_SCHEMA = {
   type: "object",
   properties: {
     title: { type: "string" },
-    status: { type: "string", enum: ["consider", "todo"], description: "consider = unvetted idea to triage later; todo = agreed action. Omit for the default (todo)." },
+    status: { type: "string", enum: ["consider", "todo"], description: "consider = the user still wants to think it through (usually by talking it over with Claude) or hasn't committed to doing it; todo = already discussed and decided, just needs doing. Omit for the default (todo)." },
     priority: { type: "integer", minimum: 0, maximum: 3 },
     due_date: { type: "string", description: "YYYY-MM-DD — the day the user wants this on their calendar" },
     due_time: { type: "string", description: "HH:MM, only with due_date" },
@@ -42,8 +42,32 @@ const LINK_ITEM_SCHEMA = {
 export const TOOL_DEFS = [
   {
     name: "list_projects",
-    description: "List the user's active Kanryo projects (id, name, description, open task counts). ALWAYS call this before creating anything — adding to an existing project beats creating a duplicate.",
+    description: "List the user's active Kanryo projects (id, name, description, per-status task counts). ALWAYS call this before creating anything — adding to an existing project beats creating a duplicate. Use list_tasks to see the actual tasks in a project.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "list_tasks",
+    description: "List the tasks in a Kanryo project, optionally filtered by status. Use it to answer questions like 'what's on my consider list', to check whether something is already tracked before adding a duplicate, and to get the task_id needed by set_task_status. Kanryo's three states: consider = the user wants to think it through (typically in a conversation with Claude) or hasn't committed; todo = decided, waiting to be done; done = finished.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_id: { type: "integer" },
+        status: { type: "string", enum: ["consider", "todo", "done"] },
+      },
+      required: ["project_id"],
+    },
+  },
+  {
+    name: "set_task_status",
+    description: "Move one or more Kanryo tasks between the three states. OFFER this (never do it silently) when: work just finished on something tracked (todo -> done); a 'consider' item was talked through and the user decided to go ahead (consider -> todo) or is postponing it again; or the user says something is finished. Marking a task done also removes its Google Calendar event automatically. Get task_ids from list_tasks.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_ids: { type: "array", items: { type: "integer" } },
+        status: { type: "string", enum: ["consider", "todo", "done"] },
+      },
+      required: ["task_ids", "status"],
+    },
   },
   {
     name: "create_project",
@@ -63,7 +87,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "add_tasks",
-    description: "Add tasks to an existing Kanryo project (get project_id from list_projects). Offer this when discussion surfaces new actionable work for something already tracked — ask the user before calling.",
+    description: "Add tasks to an existing Kanryo project (get project_id from list_projects). Offer this when discussion surfaces new actionable work for something already tracked — ask the user before calling. Decided work goes in as todo; things the user still wants to think through go in as consider.",
     inputSchema: {
       type: "object",
       properties: { project_id: { type: "integer" }, tasks: { type: "array", items: TASK_ITEM_SCHEMA } },
@@ -126,6 +150,8 @@ export async function handleRpc(
 type Ctx = Context<{ Bindings: Env }>;
 
 class ToolError extends Error {}
+
+const STATUS_VALUES = ["consider", "todo", "done"];
 
 async function requireProject(c: Ctx, id: unknown): Promise<any> {
   const project = typeof id === "number"
@@ -204,6 +230,33 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
       const links = await addLinksTo(c, project.id, args.links);
       if (links.length === 0) throw new ToolError("links array is required and must be non-empty");
       return { project: project.name, links_created: links.length, links };
+    }
+    case "list_tasks": {
+      const project = await requireProject(c, args.project_id);
+      const status = typeof args.status === "string" ? args.status : null;
+      if (status && !STATUS_VALUES.includes(status)) throw new ToolError("status must be consider, todo or done");
+      const { results } = status
+        ? await c.env.DB.prepare(
+            `SELECT id, title, status, priority, due_date, due_time, parent_id, notes
+             FROM tasks WHERE project_id = ? AND status = ? ORDER BY position, id`,
+          ).bind(project.id, status).all()
+        : await c.env.DB.prepare(
+            `SELECT id, title, status, priority, due_date, due_time, parent_id, notes
+             FROM tasks WHERE project_id = ? ORDER BY status, position, id`,
+          ).bind(project.id).all();
+      return { project: project.name, tasks: results };
+    }
+    case "set_task_status": {
+      const ids = Array.isArray(args.task_ids) ? args.task_ids.filter((x: unknown) => typeof x === "number") : [];
+      if (ids.length === 0) throw new ToolError("task_ids must contain at least one task id — get them from list_tasks");
+      if (!STATUS_VALUES.includes(args.status)) throw new ToolError("status must be consider, todo or done");
+      const updated: any[] = [];
+      for (const id of ids) {
+        const r = await patchTask(c, id, { status: args.status });
+        if (r.error) throw new ToolError(`task ${id}: ${r.error}`);
+        updated.push({ id: r.task.id, title: r.task.title, status: r.task.status });
+      }
+      return { updated_count: updated.length, tasks: updated };
     }
     case "add_inbox_item": {
       const r = await createTask(c, { title: args.title });
