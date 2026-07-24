@@ -48,6 +48,14 @@ export async function createTask(
   return { task: { ...row, labels: body.labels ?? [] } };
 }
 
+taskRoutes.get("/:id", async (c) => {
+  const row = await c.env.DB.prepare("SELECT * FROM tasks WHERE id = ?")
+    .bind(Number(c.req.param("id"))).first<any>();
+  if (!row) return c.json({ error: "not found" }, 404);
+  const [withLabels] = await attachLabels(c.env.DB, [row]);
+  return c.json(withLabels);
+});
+
 taskRoutes.post("/", async (c) => {
   const result = await createTask(c, await c.req.json<CreateTaskBody>());
   if (result.error) return c.json({ error: result.error }, 400);

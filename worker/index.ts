@@ -26,6 +26,17 @@ app.onError((err, c) => {
   return c.json({ error: "internal error" }, 500);
 });
 
+// JSON without an explicit charset is decoded as Latin-1 by strict clients (PowerShell,
+// some HTTP libs), which mangles every non-ASCII character in task text. Say UTF-8 out loud.
+app.use("*", async (c, next) => {
+  await next();
+  const ct = c.res.headers.get("content-type");
+  if (ct?.startsWith("application/json") && !ct.toLowerCase().includes("charset")) {
+    c.res = new Response(c.res.body, c.res);
+    c.res.headers.set("content-type", "application/json; charset=utf-8");
+  }
+});
+
 app.use("/api/*", authMiddleware);
 
 app.get("/api/health", (c) => c.json({ ok: true }));
