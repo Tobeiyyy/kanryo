@@ -42,8 +42,23 @@ const LINK_ITEM_SCHEMA = {
 export const TOOL_DEFS = [
   {
     name: "list_projects",
-    description: "List the user's active Kanryo projects (id, name, description, per-status task counts). ALWAYS call this before creating anything — adding to an existing project beats creating a duplicate. Use list_tasks to see the actual tasks in a project.",
-    inputSchema: { type: "object", properties: {} },
+    description: "List the user's active (not yet completed) Kanryo projects — id, name, description, per-status task counts. ALWAYS call this before creating anything — adding to an existing project beats creating a duplicate. Pass include_completed: true to also see finished projects. Use list_tasks to see the actual tasks in a project.",
+    inputSchema: {
+      type: "object",
+      properties: { include_completed: { type: "boolean" } },
+    },
+  },
+  {
+    name: "set_project_completed",
+    description: "Mark a whole Kanryo project finished, or reopen a finished one. Offer this when the user says a project is done or its last open work just got finished — ask first. Completing moves the project off the dashboard into the 'Completed' drawer; it does NOT touch the project's tasks, so check list_tasks first and mention any still-open tasks when you offer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_id: { type: "integer" },
+        completed: { type: "boolean", description: "true to complete, false to reopen" },
+      },
+      required: ["project_id", "completed"],
+    },
   },
   {
     name: "list_tasks",
@@ -220,15 +235,30 @@ async function addLinksTo(c: Ctx, projectId: number, links: unknown): Promise<an
 async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
   switch (name) {
     case "list_projects": {
+      // Completion, not the vestigial status column, decides what counts as active.
+      const includeCompleted = args.include_completed === true;
       const { results } = await c.env.DB.prepare(
-        `SELECT p.id, p.name, p.description, p.icon, p.accent,
+        `SELECT p.id, p.name, p.description, p.icon, p.accent, p.completed_at,
            COUNT(CASE WHEN t.status = 'consider' AND t.parent_id IS NULL THEN 1 END) AS consider_count,
            COUNT(CASE WHEN t.status = 'todo' AND t.parent_id IS NULL THEN 1 END) AS todo_count,
            COUNT(CASE WHEN t.status = 'done' AND t.parent_id IS NULL THEN 1 END) AS done_count
          FROM projects p LEFT JOIN tasks t ON t.project_id = p.id
-         WHERE p.status = 'active' GROUP BY p.id ORDER BY p.name`,
+         ${includeCompleted ? "" : "WHERE p.completed_at IS NULL"}
+         GROUP BY p.id ORDER BY p.name`,
       ).all();
       return { projects: results };
+    }
+    case "set_project_completed": {
+      const project = await requireProject(c, args.project_id);
+      if (typeof args.completed !== "boolean") throw new ToolError("completed must be true or false");
+      const row = await c.env.DB.prepare(
+        `UPDATE projects SET completed_at = ${args.completed ? "datetime('now')" : "NULL"}
+         WHERE id = ? RETURNING id, name, completed_at`,
+      ).bind(project.id).first<any>();
+      const open = await c.env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM tasks WHERE project_id = ? AND status != 'done' AND parent_id IS NULL",
+      ).bind(project.id).first<{ n: number }>();
+      return { project: row, open_tasks: open?.n ?? 0 };
     }
     case "create_project": {
       const projName = typeof args.name === "string" ? args.name.trim() : "";

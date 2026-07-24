@@ -108,11 +108,21 @@ export default function Project() {
       });
   }
 
+  const completeButton = (
+    <button
+      className="btn complete-btn"
+      onClick={() => patchProject({ completed: !project.completed_at })}
+    >
+      {project.completed_at ? "Reopen project" : "✓ Complete project"}
+    </button>
+  );
+
   function renderColumn(status: TaskStatus) {
     return (
       <Column
         key={status} status={status} label={STATUS_LABELS[status]}
         tasks={visible(status)} onDrop={dropOnColumn}
+        footer={status === "done" ? completeButton : null}
         render={(t) => (
           <div key={t.id}
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -174,9 +184,6 @@ export default function Project() {
             </div>
           ))}
           <div className="settings-row" style={{ marginTop: 10 }}>
-            <button className="btn" onClick={() => patchProject({ completed: !project.completed_at })}>
-              {project.completed_at ? "Reopen project" : "Mark complete"}
-            </button>
             <button className="btn btn-danger" onClick={() => {
               if (confirm(`Delete "${project.name}" and all its tasks?`)) {
                 void api(`/api/projects/${project.id}`, { method: "DELETE" }).then(() => navigate("/"));
@@ -222,6 +229,7 @@ export default function Project() {
           {visible(tab).map((t) => (
             <TaskRow key={t.id} task={t} subtasks={subsOf(t)} onOpen={(x) => setSelectedId(x.id)} />
           ))}
+          {tab === "done" && completeButton}
         </>
       )}
 
@@ -259,10 +267,11 @@ function LinkChip({ link }: { link: ProjectLink }) {
   );
 }
 
-function Column({ label, status, tasks, onDrop, render }: {
+function Column({ label, status, tasks, onDrop, render, footer }: {
   status: TaskStatus; label: string; tasks: Task[];
   onDrop: (taskId: number, status: TaskStatus) => void;
   render: (t: Task) => React.ReactNode;
+  footer?: React.ReactNode;
 }) {
   const [over, setOver] = useState(false);
   return (
@@ -275,6 +284,7 @@ function Column({ label, status, tasks, onDrop, render }: {
       }}>
       <h4>{label} ({tasks.length})</h4>
       {tasks.map(render)}
+      {footer}
     </div>
   );
 }

@@ -22,7 +22,7 @@ describe("handleRpc", () => {
     const res: any = await handleRpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, call);
     expect(res.result.tools.map((t: any) => t.name).sort()).toEqual(
       ["add_inbox_item", "add_links", "add_tasks", "create_project", "delete_tasks",
-       "list_projects", "list_tasks", "set_task_status", "update_task"]);
+       "list_projects", "list_tasks", "set_project_completed", "set_task_status", "update_task"]);
     for (const t of res.result.tools) {
       expect(typeof t.description).toBe("string");
       expect(t.inputSchema.type).toBe("object");
@@ -57,6 +57,11 @@ describe("handleRpc", () => {
     expect(tool.inputSchema.required).toEqual(["task_id"]);
     expect(Object.keys(tool.inputSchema.properties as any).sort()).toEqual(
       ["due_date", "due_time", "notes", "priority", "task_id", "title"]);
+  });
+  it("set_project_completed toggles both ways and needs both args", () => {
+    const tool = TOOL_DEFS.find((t) => t.name === "set_project_completed")!;
+    expect(tool.inputSchema.required).toEqual(["project_id", "completed"]);
+    expect((tool.inputSchema.properties as any).completed.type).toBe("boolean");
   });
   it("delete_tasks warns that it is permanent", () => {
     const tool = TOOL_DEFS.find((t) => t.name === "delete_tasks")!;
