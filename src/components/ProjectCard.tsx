@@ -20,7 +20,7 @@ export default function ProjectCard({ p, completed = false }: {
     >
       <h3>{p.icon ? `${p.icon} ` : ""}{p.name}</h3>
       <div className="counts">
-        {p.todo_count} to do · {p.consider_count} to consider · {p.done_count} done
+        {p.todo_count} to do · {p.consider_count} to review · {p.done_count} done
       </div>
       {completed
         ? <div className="done-hint">completed {p.completed_at?.slice(0, 10)}</div>

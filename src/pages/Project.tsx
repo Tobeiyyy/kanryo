@@ -8,7 +8,9 @@ import TaskDetail from "../components/TaskDetail";
 
 const STATUSES: TaskStatus[] = ["consider", "todo", "done"];
 const STATUS_LABELS: Record<TaskStatus, string> = {
-  consider: "To consider", todo: "To do", done: "Done",
+  // The stored value stays `consider` (changing it means rebuilding the tasks table); the
+  // column is called "To review" everywhere the user sees it.
+  consider: "To review", todo: "To do", done: "Done",
 };
 const ACCENTS = ["teal", "coral", "violet", "blue", "amber", "rose", "green", "slate"];
 const KINDS = ["repo", "live", "storage", "claude", "other"];
@@ -92,7 +94,7 @@ export default function Project() {
   function addTask(e: React.FormEvent) {
     e.preventDefault();
     if (!newTask.trim()) return;
-    // Desktop shows all three columns, so a new task starts in "to consider" (the default);
+    // Desktop shows all three columns, so a new task starts in "to review" (the default);
     // on mobile it lands in whichever column you're looking at, or it would vanish from view.
     create.mutate({ title: newTask.trim(), project_id: project.id, status: isDesktop ? "consider" : tab });
     setNewTask("");

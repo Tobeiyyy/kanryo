@@ -20,7 +20,7 @@ const TASK_ITEM_SCHEMA = {
   type: "object",
   properties: {
     title: { type: "string" },
-    status: { type: "string", enum: ["consider", "todo"], description: "consider = the user still wants to think it through (usually by talking it over with Claude) or hasn't committed to doing it; todo = already discussed and decided in this conversation, just needs doing. DEFAULT IS consider — pass todo explicitly for work the user has actually decided on." },
+    status: { type: "string", enum: ["consider", "todo"], description: "consider = the app's 'To review' column: the user still wants to think it through (usually by talking it over with Claude) or hasn't committed to doing it. Always send the literal value 'consider' for it, even though the UI calls it review. todo = already discussed and decided in this conversation, just needs doing. DEFAULT IS consider — pass todo explicitly for work the user has actually decided on." },
     priority: { type: "integer", minimum: 0, maximum: 3 },
     due_date: { type: "string", description: "YYYY-MM-DD — the day the user wants this on their calendar" },
     due_time: { type: "string", description: "HH:MM, only with due_date" },
@@ -62,7 +62,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "list_tasks",
-    description: "List the tasks in a Kanryo project, optionally filtered by status. Use it to answer questions like 'what's on my consider list', to check whether something is already tracked before adding a duplicate, and to get the task_id needed by set_task_status. Kanryo's three states: consider = the user wants to think it through (typically in a conversation with Claude) or hasn't committed; todo = decided, waiting to be done; done = finished.",
+    description: "List the tasks in a Kanryo project, optionally filtered by status. Use it to answer questions like 'what's on my review list', to check whether something is already tracked before adding a duplicate, and to get the task_id needed by set_task_status. Kanryo's three states: consider (shown in the app as 'To review') = the user wants to think it through, typically in a conversation with Claude, or hasn't committed; todo = decided, waiting to be done; done = finished. The status values on the wire are always consider/todo/done.",
     inputSchema: {
       type: "object",
       properties: {
@@ -74,7 +74,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "set_task_status",
-    description: "Move one or more Kanryo tasks between the three states. OFFER this (never do it silently) when: work just finished on something tracked (todo -> done); a 'consider' item was talked through and the user decided to go ahead (consider -> todo) or is postponing it again; or the user says something is finished. Marking a task done also removes its Google Calendar event automatically. Get task_ids from list_tasks.",
+    description: "Move one or more Kanryo tasks between the three states. OFFER this (never do it silently) when: work just finished on something tracked (todo -> done); a 'to review' item (status value: consider) was talked through and the user decided to go ahead (consider -> todo) or is postponing it again; or the user says something is finished. Marking a task done also removes its Google Calendar event automatically. Get task_ids from list_tasks.",
     inputSchema: {
       type: "object",
       properties: {
@@ -86,7 +86,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "create_project",
-    description: "Create a new Kanryo project, optionally seeded with tasks and links. Offer this when a conversation has produced a concrete project-worthy idea — ask the user before calling. Seeded tasks default to consider; pass status 'todo' only for steps the user actually decided on in the conversation.",
+    description: "Create a new Kanryo project, optionally seeded with tasks and links. Offer this when a conversation has produced a concrete project-worthy idea — ask the user before calling. Seeded tasks default to consider (the 'To review' column); pass status 'todo' only for steps the user actually decided on in the conversation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -102,7 +102,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "add_tasks",
-    description: "Add tasks to an existing Kanryo project (get project_id from list_projects). Offer this when discussion surfaces new actionable work for something already tracked — ask the user before calling. Tasks default to consider; pass status 'todo' only for work the user has actually decided on.",
+    description: "Add tasks to an existing Kanryo project (get project_id from list_projects). Offer this when discussion surfaces new actionable work for something already tracked — ask the user before calling. Tasks default to consider (the 'To review' column); pass status 'todo' only for work the user has actually decided on.",
     inputSchema: {
       type: "object",
       properties: { project_id: { type: "integer" }, tasks: { type: "array", items: TASK_ITEM_SCHEMA } },
@@ -120,7 +120,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "update_task",
-    description: "Edit an existing Kanryo task's text or scheduling — title, notes, priority, due date/time. Presence-based: only the fields you pass change, everything else is left alone. Use this to fix a wording, sharpen a vague task, or add notes from a conversation, instead of creating a near-duplicate. For moving between consider/todo/done use set_task_status. Get task_id from list_tasks. Offer before calling.",
+    description: "Edit an existing Kanryo task's text or scheduling — title, notes, priority, due date/time. Presence-based: only the fields you pass change, everything else is left alone. Use this to fix a wording, sharpen a vague task, or add notes from a conversation, instead of creating a near-duplicate. For moving between review/todo/done use set_task_status. Get task_id from list_tasks. Offer before calling.",
     inputSchema: {
       type: "object",
       properties: {

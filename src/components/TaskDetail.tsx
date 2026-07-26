@@ -51,7 +51,7 @@ export default function TaskDetail({ task, subtasks, onClose }: {
             <label>Status</label>
             <select className="input" value={task.status}
               onChange={(e) => save({ status: e.target.value as TaskStatus })}>
-              <option value="consider">To consider</option>
+              <option value="consider">To review</option>
               <option value="todo">To do</option>
               <option value="done">Done</option>
             </select>
