@@ -22,7 +22,8 @@ describe("handleRpc", () => {
     const res: any = await handleRpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, call);
     expect(res.result.tools.map((t: any) => t.name).sort()).toEqual(
       ["add_inbox_item", "add_links", "add_tasks", "create_project", "delete_tasks",
-       "list_projects", "list_tasks", "set_project_completed", "set_task_status", "update_task"]);
+       "file_inbox_item", "list_inbox", "list_projects", "list_tasks",
+       "set_project_completed", "set_task_status", "update_task"]);
     for (const t of res.result.tools) {
       expect(typeof t.description).toBe("string");
       expect(t.inputSchema.type).toBe("object");
@@ -62,6 +63,16 @@ describe("handleRpc", () => {
     const tool = TOOL_DEFS.find((t) => t.name === "set_project_completed")!;
     expect(tool.inputSchema.required).toEqual(["project_id", "completed"]);
     expect((tool.inputSchema.properties as any).completed.type).toBe("boolean");
+  });
+  it("list_inbox takes no arguments", () => {
+    const tool = TOOL_DEFS.find((t) => t.name === "list_inbox")!;
+    expect(Object.keys(tool.inputSchema.properties as any)).toEqual([]);
+    expect((tool.inputSchema as any).required).toBeUndefined();
+  });
+  it("file_inbox_item needs both ids and says it only moves inbox items", () => {
+    const tool = TOOL_DEFS.find((t) => t.name === "file_inbox_item")!;
+    expect(tool.inputSchema.required).toEqual(["task_id", "project_id"]);
+    expect(tool.description).toMatch(/refuses a task that already belongs to a project/i);
   });
   it("delete_tasks warns that it is permanent", () => {
     const tool = TOOL_DEFS.find((t) => t.name === "delete_tasks")!;

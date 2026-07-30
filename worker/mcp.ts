@@ -148,6 +148,20 @@ export const TOOL_DEFS = [
     description: "Drop a single stray-but-keepable idea into the Kanryo inbox for later triage — the lightweight outcome when something is worth keeping but not yet project-worthy. Ask the user before calling.",
     inputSchema: { type: "object", properties: { title: { type: "string" } }, required: ["title"] },
   },
+  {
+    name: "list_inbox",
+    description: "List the raw ideas sitting in the Kanryo inbox — items captured without a project, waiting to be filed. This is the entry point for inbox triage: read them, then use file_inbox_item to move each one onto the project it belongs to (calling create_project first when an idea deserves its own). Returns id, title, notes and capture date. An empty inbox is a normal result, not an error.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "file_inbox_item",
+    description: "Move ONE inbox item out of the Kanryo inbox onto a project — the same thing the user does by hand on the Inbox page. Get task_id from list_inbox and project_id from list_projects. The item keeps its consider status, so it lands in the project's 'To review' column. Only works on unfiled inbox items: it refuses a task that already belongs to a project, so it can never re-parent established work.",
+    inputSchema: {
+      type: "object",
+      properties: { task_id: { type: "integer" }, project_id: { type: "integer" } },
+      required: ["task_id", "project_id"],
+    },
+  },
 ];
 
 export async function handleRpc(
@@ -339,6 +353,29 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
       const r = await createTask(c, { title: args.title });
       if (r.error) throw new ToolError(r.error);
       return { task: r.task, note: "added to inbox for later triage" };
+    }
+    case "list_inbox": {
+      // Same query as the app's Inbox page, so the tool shows exactly what the user sees.
+      const { results } = await c.env.DB.prepare(
+        "SELECT id, title, notes, created_at FROM tasks WHERE project_id IS NULL ORDER BY created_at DESC, id DESC",
+      ).all();
+      return { items: results };
+    }
+    case "file_inbox_item": {
+      const project = await requireProject(c, args.project_id);
+      if (typeof args.task_id !== "number") throw new ToolError("task_id is required — get it from list_inbox");
+      const row = await c.env.DB.prepare("SELECT id, project_id FROM tasks WHERE id = ?")
+        .bind(args.task_id).first<{ id: number; project_id: number | null }>();
+      if (!row) throw new ToolError(`task ${args.task_id} not found`);
+      // The guard that keeps this from becoming a general re-parent tool.
+      if (row.project_id !== null) {
+        throw new ToolError(
+          `task ${args.task_id} is already filed under project ${row.project_id} — file_inbox_item only moves items out of the inbox`,
+        );
+      }
+      const r = await patchTask(c, args.task_id, { project_id: project.id });
+      if (r.error) throw new ToolError(`task ${args.task_id}: ${r.error}`);
+      return { task: r.task, project: project.name };
     }
     default:
       throw new ToolError(`unhandled tool: ${name}`);
