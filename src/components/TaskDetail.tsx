@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCreateTask, useDeleteTask, usePatchTask, useProjects } from "../api";
 import type { Task, TaskStatus } from "../../shared/types";
 import type { TaskPatchBody } from "../../worker/taskLogic";
@@ -14,12 +14,26 @@ export default function TaskDetail({ task, subtasks, onClose }: {
   const [notes, setNotes] = useState(task.notes ?? "");
   const [labelInput, setLabelInput] = useState("");
   const [subInput, setSubInput] = useState("");
+  // Titles here are frequently whole paragraphs, so the field grows instead of scrolling
+  // sideways in a one-line input. Notes stay, but only take up space once they have content.
+  const [showNotes, setShowNotes] = useState(!!task.notes);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+
+  function autoGrow(el: HTMLTextAreaElement | null) {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }
 
   useEffect(() => {
     setTitle(task.title);
     setNotes(task.notes ?? "");
+    setShowNotes(!!task.notes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id]);
+
+  useEffect(() => autoGrow(titleRef.current), [title]);
 
   const save = (fields: TaskPatchBody) => patch.mutate({ id: task.id, patch: fields });
 
@@ -41,9 +55,12 @@ export default function TaskDetail({ task, subtasks, onClose }: {
   return (
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <input
-          className="input" style={{ fontWeight: 700, fontSize: 17 }}
-          value={title} onChange={(e) => setTitle(e.target.value)}
+        <textarea
+          ref={titleRef}
+          className="input title-input"
+          rows={1}
+          value={title}
+          onChange={(e) => { setTitle(e.target.value); autoGrow(e.target); }}
           onBlur={() => title.trim() && title !== task.title && save({ title: title.trim() })}
         />
         <div className="detail-grid">
@@ -100,10 +117,21 @@ export default function TaskDetail({ task, subtasks, onClose }: {
             ))}
           </div>
         )}
-        <label style={{ fontSize: 12, color: "var(--tx3)" }}>Notes</label>
-        <textarea className="input" rows={3} value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          onBlur={() => (notes || null) !== task.notes && save({ notes: notes || null })} />
+        {showNotes ? (
+          <>
+            <label style={{ fontSize: 12, color: "var(--tx3)" }}>Notes</label>
+            <textarea ref={notesRef} className="input" rows={3} value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={() => (notes || null) !== task.notes && save({ notes: notes || null })} />
+          </>
+        ) : (
+          <button
+            className="link-btn"
+            onClick={() => { setShowNotes(true); setTimeout(() => notesRef.current?.focus(), 0); }}
+          >
+            + add notes
+          </button>
+        )}
 
         <h3 style={{ fontSize: 14, margin: "14px 0 6px" }}>
           Subtasks {subtasks.length > 0 && `(${subtasks.filter((s) => s.status === "done").length}/${subtasks.length})`}
