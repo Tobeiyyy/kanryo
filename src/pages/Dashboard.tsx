@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [hoverZone, setHoverZone] = useState<Zone | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -51,6 +52,11 @@ export default function Dashboard() {
   });
 
   const doneCount = completed.data?.length ?? 0;
+  const allTags = [...new Set((projects.data ?? []).flatMap((p) => p.tags ?? []))].sort();
+  // A project matches when it carries every selected tag (narrowing, not widening).
+  const visibleProjects = (projects.data ?? []).filter(
+    (p) => tagFilter.length === 0 || tagFilter.every((t) => p.tags?.includes(t)),
+  );
 
   return (
     // Drag events bubble from the cards, so the completed drawer can reveal itself as a drop
@@ -66,11 +72,26 @@ export default function Dashboard() {
         </Link>
       )}
 
+      {allTags.length > 0 && (
+        <div className="tag-filter">
+          <span className="label">tags</span>
+          {allTags.map((t) => (
+            <button
+              key={t}
+              className={`chip ${tagFilter.includes(t) ? "on" : ""}`}
+              onClick={() => setTagFilter(tagFilter.includes(t) ? tagFilter.filter((x) => x !== t) : [...tagFilter, t])}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div
         className={`project-grid${hoverZone === "active" ? " drop-target" : ""}`}
         {...zone("active")}
       >
-        {projects.data?.map((p) => <ProjectCard key={p.id} p={p} />)}
+        {visibleProjects.map((p) => <ProjectCard key={p.id} p={p} />)}
         {creating ? (
           <form className="card project-card" onSubmit={createProject}>
             <input

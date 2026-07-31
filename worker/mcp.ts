@@ -3,7 +3,7 @@ import type { Context } from "hono";
 import type { Env } from "./index";
 import { hmac } from "./auth";
 import { createTask, deleteTask, patchTask } from "./tasks";
-import { ACCENTS, KINDS } from "./projects";
+import { ACCENTS, KINDS, attachTags, setProjectTags } from "./projects";
 
 export type RpcMessage = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
 
@@ -42,10 +42,22 @@ const LINK_ITEM_SCHEMA = {
 export const TOOL_DEFS = [
   {
     name: "list_projects",
-    description: "List the user's active (not yet completed) Kanryo projects — id, name, description, per-status task counts. ALWAYS call this before creating anything — adding to an existing project beats creating a duplicate. Pass include_completed: true to also see finished projects. Use list_tasks to see the actual tasks in a project.",
+    description: "List the user's active (not yet completed) Kanryo projects — id, name, description, tags, per-status task counts. ALWAYS call this before creating anything — adding to an existing project beats creating a duplicate. Each project carries free-form tags (finance, business, income, hobby, ...): projects that share a tag are related, so when working on one, its tag-siblings are the places to look for overlapping work, reusable pieces or conflicting plans — mention the connection when it is useful, and prefer an existing tag over inventing a synonym. Pass include_completed: true to also see finished projects. Use list_tasks to see the actual tasks in a project.",
     inputSchema: {
       type: "object",
       properties: { include_completed: { type: "boolean" } },
+    },
+  },
+  {
+    name: "set_project_tags",
+    description: "Replace a project's tags (free-form: finance, business, income, hobby, learning, ...). Tags are how the user groups related projects, so reuse the exact spelling of tags that already exist on other projects rather than inventing a near-synonym; call list_projects first to see what is in use. Passing an empty array clears all tags. Offer before calling.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_id: { type: "integer" },
+        tags: { type: "array", items: { type: "string" } },
+      },
+      required: ["project_id", "tags"],
     },
   },
   {
@@ -94,6 +106,7 @@ export const TOOL_DEFS = [
         description: { type: "string" },
         icon: { type: "string", description: "a single emoji" },
         accent: { type: "string", enum: ["teal", "coral", "violet", "blue", "amber", "rose", "green", "slate"] },
+        tags: { type: "array", items: { type: "string" }, description: "free-form grouping tags (finance, business, hobby, ...); reuse tags already in use on other projects rather than inventing synonyms" },
         tasks: { type: "array", items: TASK_ITEM_SCHEMA },
         links: { type: "array", items: LINK_ITEM_SCHEMA },
       },
@@ -248,6 +261,13 @@ async function addLinksTo(c: Ctx, projectId: number, links: unknown): Promise<an
 
 async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
   switch (name) {
+    case "set_project_tags": {
+      const project = await requireProject(c, args.project_id);
+      if (!Array.isArray(args.tags)) throw new ToolError("tags must be an array of strings (empty array clears them)");
+      await setProjectTags(c.env.DB, project.id, args.tags);
+      const [withTags] = await attachTags(c.env.DB, [project]);
+      return { project: { id: withTags.id, name: withTags.name, tags: withTags.tags } };
+    }
     case "list_projects": {
       // Completion, not the vestigial status column, decides what counts as active.
       const includeCompleted = args.include_completed === true;
@@ -260,7 +280,7 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
          ${includeCompleted ? "" : "WHERE p.completed_at IS NULL"}
          GROUP BY p.id ORDER BY p.name`,
       ).all();
-      return { projects: results };
+      return { projects: await attachTags(c.env.DB, results) };
     }
     case "set_project_completed": {
       const project = await requireProject(c, args.project_id);
@@ -281,6 +301,9 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
       const project = await c.env.DB.prepare(
         "INSERT INTO projects (name, description, accent, icon) VALUES (?, ?, ?, ?) RETURNING *",
       ).bind(projName, args.description ?? null, accent, args.icon ?? null).first<any>();
+      if (Array.isArray(args.tags) && args.tags.length > 0) {
+        await setProjectTags(c.env.DB, project.id, args.tags);
+      }
       const tasks = await addTasksTo(c, project.id, args.tasks);
       const links = await addLinksTo(c, project.id, args.links);
       return {

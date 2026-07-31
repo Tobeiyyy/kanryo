@@ -12,6 +12,7 @@ export interface Project {
   status: "active" | "archived";
   completed_at: string | null;
   created_at: string;
+  tags: string[];
 }
 
 export interface ProjectSummary extends Project {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, useCreateTask, usePatchTask, useProject } from "../api";
+import { api, useCreateTask, usePatchTask, useProject, useProjects } from "../api";
 import type { ProjectLink, Task, TaskStatus } from "../../shared/types";
 import TaskRow from "../components/TaskRow";
 import TaskDetail from "../components/TaskDetail";
@@ -44,6 +44,8 @@ export default function Project() {
   const [editing, setEditing] = useState(false);
   const [newTask, setNewTask] = useState("");
   const [newLink, setNewLink] = useState({ label: "", url: "", kind: "other" });
+  const [newTag, setNewTag] = useState("");
+  const allProjects = useProjects();
 
   if (!q.data) return null;
   const { project, links, tasks } = q.data;
@@ -100,6 +102,14 @@ export default function Project() {
     setNewTask("");
   }
 
+  function addTag(e: React.FormEvent) {
+    e.preventDefault();
+    const t = newTag.trim();
+    if (!t || project.tags?.includes(t)) { setNewTag(""); return; }
+    patchProject({ tags: [...(project.tags ?? []), t] });
+    setNewTag("");
+  }
+
   function addLink(e: React.FormEvent) {
     e.preventDefault();
     if (!newLink.label.trim() || !newLink.url.trim()) return;
@@ -147,6 +157,11 @@ export default function Project() {
           <button className="icon-btn" title="Edit project" onClick={() => setEditing(!editing)}>✎</button>
         </h1>
         {project.description && <p className="proj-desc">{project.description}</p>}
+        {(project.tags?.length ?? 0) > 0 && (
+          <div className="tag-row" style={{ marginBottom: 8 }}>
+            {project.tags.map((t) => <span key={t} className="tag-chip">{t}</span>)}
+          </div>
+        )}
         <div className="link-chips">
           {(links as ProjectLink[]).map((l) => <LinkChip key={l.id} link={l} />)}
         </div>
@@ -163,6 +178,22 @@ export default function Project() {
               <span key={a} className={`accent-dot ${project.accent === a ? "on" : ""}`}
                 style={{ background: `var(--p-${a})` }} onClick={() => patchProject({ accent: a })} />
             ))}
+          </div>
+          <div className="settings-row">
+            {(project.tags ?? []).map((t) => (
+              <button key={t} className="chip on" title="Remove tag"
+                onClick={() => patchProject({ tags: (project.tags ?? []).filter((x) => x !== t) })}>
+                {t} ✕
+              </button>
+            ))}
+            <form onSubmit={addTag} style={{ display: "inline" }}>
+              <input className="input" style={{ maxWidth: 150 }} placeholder="add tag ⏎" list="kanryo-tags"
+                value={newTag} onChange={(e) => setNewTag(e.target.value)} />
+              <datalist id="kanryo-tags">
+                {[...new Set((allProjects.data ?? []).flatMap((p) => p.tags ?? []))].sort()
+                  .map((t) => <option key={t} value={t} />)}
+              </datalist>
+            </form>
           </div>
           <textarea className="input" rows={2} placeholder="Description" defaultValue={project.description ?? ""}
             onBlur={(e) => (e.target.value || null) !== project.description && patchProject({ description: e.target.value || null })} />

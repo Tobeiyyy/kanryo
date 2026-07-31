@@ -26,6 +26,11 @@ export default function ProjectCard({ p, completed = false }: {
         {/* Same order as the board columns: review, then to do, then done. */}
         {p.consider_count} to review · {p.todo_count} to do · {p.done_count} done
       </div>
+      {p.tags?.length > 0 && (
+        <div className="tag-row">
+          {p.tags.map((t) => <span key={t} className="tag-chip">{t}</span>)}
+        </div>
+      )}
       {completed
         ? <div className="done-hint">completed {p.completed_at?.slice(0, 10)}</div>
         : p.next_due && open > 0 && <div className="due-hint">next due {p.next_due}</div>}

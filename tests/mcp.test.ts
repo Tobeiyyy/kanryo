@@ -23,7 +23,7 @@ describe("handleRpc", () => {
     expect(res.result.tools.map((t: any) => t.name).sort()).toEqual(
       ["add_inbox_item", "add_links", "add_tasks", "create_project", "delete_tasks",
        "file_inbox_item", "list_inbox", "list_projects", "list_tasks",
-       "set_project_completed", "set_task_status", "update_task"]);
+       "set_project_completed", "set_project_tags", "set_task_status", "update_task"]);
     for (const t of res.result.tools) {
       expect(typeof t.description).toBe("string");
       expect(t.inputSchema.type).toBe("object");
@@ -73,6 +73,12 @@ describe("handleRpc", () => {
     const tool = TOOL_DEFS.find((t) => t.name === "file_inbox_item")!;
     expect(tool.inputSchema.required).toEqual(["task_id", "project_id"]);
     expect(tool.description).toMatch(/refuses a task that already belongs to a project/i);
+  });
+  it("tag tools tell Claude that shared tags mean related projects", () => {
+    const list = TOOL_DEFS.find((t) => t.name === "list_projects")!;
+    expect(list.description).toMatch(/share a tag are related/i);
+    const setTags = TOOL_DEFS.find((t) => t.name === "set_project_tags")!;
+    expect(setTags.inputSchema.required).toEqual(["project_id", "tags"]);
   });
   it("delete_tasks warns that it is permanent", () => {
     const tool = TOOL_DEFS.find((t) => t.name === "delete_tasks")!;

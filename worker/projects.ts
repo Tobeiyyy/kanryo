@@ -26,6 +26,33 @@ export async function attachLabels(db: D1Database, tasks: any[]): Promise<any[]>
   return tasks.map((t) => ({ ...t, labels: byTask.get(t.id) ?? [] }));
 }
 
+/** Attach `tags: string[]` to project rows, mirroring attachLabels for tasks. */
+export async function attachTags(db: D1Database, projects: any[]): Promise<any[]> {
+  if (projects.length === 0) return projects;
+  const ids = projects.map((p) => p.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const { results } = await db.prepare(
+    `SELECT project_id, tag FROM project_tags WHERE project_id IN (${placeholders}) ORDER BY tag`,
+  ).bind(...ids).all<{ project_id: number; tag: string }>();
+  const byProject = new Map<number, string[]>();
+  for (const r of results) {
+    if (!byProject.has(r.project_id)) byProject.set(r.project_id, []);
+    byProject.get(r.project_id)!.push(r.tag);
+  }
+  return projects.map((p) => ({ ...p, tags: byProject.get(p.id) ?? [] }));
+}
+
+/** Replace a project's tags wholesale (presence-based patch semantics). */
+export async function setProjectTags(db: D1Database, projectId: number, tags: unknown): Promise<void> {
+  const clean = Array.isArray(tags)
+    ? [...new Set(tags.filter((t): t is string => typeof t === "string").map((t) => t.trim()).filter(Boolean))]
+    : [];
+  await db.batch([
+    db.prepare("DELETE FROM project_tags WHERE project_id = ?").bind(projectId),
+    ...clean.map((t) => db.prepare("INSERT INTO project_tags (project_id, tag) VALUES (?, ?)").bind(projectId, t)),
+  ]);
+}
+
 projectRoutes.get("/", async (c) => {
   // Completion replaced archiving: active = not yet completed, completed = finished.
   const completed = c.req.query("completed") === "1";
@@ -41,24 +68,29 @@ projectRoutes.get("/", async (c) => {
      GROUP BY p.id
      ORDER BY ${completed ? "p.completed_at DESC" : "last_activity DESC"}`,
   ).all();
-  return c.json(results);
+  return c.json(await attachTags(c.env.DB, results));
 });
 
 projectRoutes.post("/", async (c) => {
-  const body = await c.req.json<{ name?: string; description?: string; accent?: string; icon?: string }>();
+  const body = await c.req.json<{ name?: string; description?: string; accent?: string; icon?: string; tags?: string[] }>();
   const name = body.name?.trim();
   if (!name) return c.json({ error: "name required" }, 400);
   const accent = ACCENTS.includes(body.accent ?? "") ? body.accent : "teal";
   const row = await c.env.DB.prepare(
     "INSERT INTO projects (name, description, accent, icon) VALUES (?, ?, ?, ?) RETURNING *",
-  ).bind(name, body.description ?? null, accent, body.icon ?? null).first();
-  return c.json(row, 201);
+  ).bind(name, body.description ?? null, accent, body.icon ?? null).first<any>();
+  if (Array.isArray(body.tags) && body.tags.length > 0) {
+    await setProjectTags(c.env.DB, row.id, body.tags);
+  }
+  const [withTags] = await attachTags(c.env.DB, [row]);
+  return c.json(withTags, 201);
 });
 
 projectRoutes.get("/:id", async (c) => {
   const id = Number(c.req.param("id"));
-  const project = await c.env.DB.prepare("SELECT * FROM projects WHERE id = ?").bind(id).first();
-  if (!project) return c.json({ error: "not found" }, 404);
+  const projectRow = await c.env.DB.prepare("SELECT * FROM projects WHERE id = ?").bind(id).first();
+  if (!projectRow) return c.json({ error: "not found" }, 404);
+  const [project] = await attachTags(c.env.DB, [projectRow]);
   const links = (await c.env.DB.prepare(
     "SELECT * FROM project_links WHERE project_id = ? ORDER BY position, id",
   ).bind(id).all()).results;
@@ -84,12 +116,21 @@ projectRoutes.patch("/:id", async (c) => {
   if ("completed" in body) {
     sets.push(`completed_at = ${body.completed ? "datetime('now')" : "NULL"}`);
   }
-  if (sets.length === 0) return c.json({ error: "empty patch" }, 400);
+  // Tags are replaced wholesale when present, left alone when absent.
+  if ("tags" in body) await setProjectTags(c.env.DB, id, body.tags);
+  if (sets.length === 0) {
+    if (!("tags" in body)) return c.json({ error: "empty patch" }, 400);
+    const current = await c.env.DB.prepare("SELECT * FROM projects WHERE id = ?").bind(id).first();
+    if (!current) return c.json({ error: "not found" }, 404);
+    const [withTags] = await attachTags(c.env.DB, [current]);
+    return c.json(withTags);
+  }
   const row = await c.env.DB.prepare(
     `UPDATE projects SET ${sets.join(", ")} WHERE id = ? RETURNING *`,
   ).bind(...values, id).first();
   if (!row) return c.json({ error: "not found" }, 404);
-  return c.json(row);
+  const [withTags] = await attachTags(c.env.DB, [row]);
+  return c.json(withTags);
 });
 
 projectRoutes.delete("/:id", async (c) => {
