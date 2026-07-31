@@ -22,8 +22,8 @@ describe("handleRpc", () => {
     const res: any = await handleRpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, call);
     expect(res.result.tools.map((t: any) => t.name).sort()).toEqual(
       ["add_inbox_item", "add_links", "add_tasks", "create_project", "delete_tasks",
-       "file_inbox_item", "list_inbox", "list_projects", "list_tasks",
-       "set_project_completed", "set_project_tags", "set_task_status", "update_task"]);
+       "file_inbox_item", "get_habit_log", "list_inbox", "list_projects", "list_tasks",
+       "log_habits", "set_project_completed", "set_project_tags", "set_task_status", "update_task"]);
     for (const t of res.result.tools) {
       expect(typeof t.description).toBe("string");
       expect(t.inputSchema.type).toBe("object");
@@ -87,5 +87,20 @@ describe("handleRpc", () => {
   it("unknown method -> -32601", async () => {
     const res: any = await handleRpc({ jsonrpc: "2.0", id: 6, method: "resources/list" }, call);
     expect(res.error.code).toBe(-32601);
+  });
+  it("log_habits requires dated entries and documents the '-' translation rule", () => {
+    const tool = TOOL_DEFS.find((t) => t.name === "log_habits")!;
+    expect(tool.inputSchema.required).toEqual(["entries"]);
+    const entry = (tool.inputSchema.properties as any).entries.items;
+    expect(entry.required).toEqual(["date", "chunk", "picked"]);
+    expect(entry.properties.chunk.enum).toEqual(["morning", "workout", "read"]);
+    expect(tool.description).toMatch(/'-' = OMIT/i);
+    expect(tool.description).toMatch(/all-or-nothing/i);
+  });
+  it("get_habit_log takes only optional from/to and explains NULL vs 0", () => {
+    const tool = TOOL_DEFS.find((t) => t.name === "get_habit_log")!;
+    expect((tool.inputSchema as any).required).toBeUndefined();
+    expect(Object.keys(tool.inputSchema.properties as any).sort()).toEqual(["from", "to"]);
+    expect(tool.description).toMatch(/null.*not reported/i);
   });
 });
