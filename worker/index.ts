@@ -4,6 +4,7 @@ import { projectRoutes, linkRoutes } from "./projects";
 import { taskRoutes, inboxRoutes } from "./tasks";
 import { gcalRoutes } from "./gcalRoutes";
 import { mcpRoutes } from "./mcp";
+import { habitRoutes } from "./habits";
 
 export type Env = {
   DB: D1Database;
@@ -66,5 +67,6 @@ app.route("/api/tasks", taskRoutes);
 app.route("/api/inbox", inboxRoutes);
 app.route("/api/gcal", gcalRoutes);
 app.route("/mcp", mcpRoutes);
+app.route("/habit", habitRoutes);
 
 export default app;
