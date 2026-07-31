@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleRpc, TOOL_DEFS } from "../worker/mcp";
+import { handleRpc, mcpRoutes, TOOL_DEFS } from "../worker/mcp";
+import { addDays, logicalDate } from "../worker/habitLogic";
 
 const call = vi.fn(async () => ({ ok: true }));
 
@@ -102,5 +103,71 @@ describe("handleRpc", () => {
     expect((tool.inputSchema as any).required).toBeUndefined();
     expect(Object.keys(tool.inputSchema.properties as any).sort()).toEqual(["from", "to"]);
     expect(tool.description).toMatch(/null.*not reported/i);
+  });
+});
+
+function fakeDb() {
+  const stmt: any = {
+    bind: vi.fn(() => stmt),
+    first: vi.fn(async () => null),
+    all: vi.fn(async () => ({ results: [] })),
+  };
+  const db: any = { prepare: vi.fn(() => stmt), batch: vi.fn(async () => []) };
+  return db;
+}
+
+const ENV = (db: any) => ({ DB: db, KANRYO_TOKEN: "tok", AUTH_SECRET: "s" }) as any;
+
+const callHabits = (args: unknown, env: any) =>
+  mcpRoutes.request("/tok", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0", id: 1, method: "tools/call",
+      params: { name: "log_habits", arguments: args },
+    }),
+  }, env);
+
+describe("log_habits handler", () => {
+  const today = logicalDate();
+
+  it("mixed batch: the invalid entry rejects the whole batch by index, nothing written", async () => {
+    const db = fakeDb();
+    const res = await callHabits({ entries: [
+      { date: today, chunk: "read", picked: ["read"] },
+      { date: today, chunk: "evening", picked: [] },
+    ] }, ENV(db));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toMatch(/nothing written/);
+    expect(body.result.content[0].text).toMatch(/entry 1: unknown chunk/);
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
+  it("valid batch: one db.batch call, returns written count and sorted unique dates", async () => {
+    const db = fakeDb();
+    const yesterday = addDays(today, -1);
+    const res = await callHabits({ entries: [
+      { date: today, chunk: "read", picked: [] },
+      { date: yesterday, chunk: "morning", picked: ["up", "med"] },
+      { date: yesterday, chunk: "workout", picked: ["workout"] },
+    ] }, ENV(db));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.result.isError).toBeUndefined();
+    expect(JSON.parse(body.result.content[0].text)).toEqual({ written: 3, dates: [yesterday, today] });
+    expect(db.batch).toHaveBeenCalledTimes(1);
+    expect(db.batch.mock.calls[0][0]).toHaveLength(3);
+  });
+
+  it("null entry -> per-entry error, not a TypeError crash", async () => {
+    const db = fakeDb();
+    const res = await callHabits({ entries: [null] }, ENV(db));
+    const body = (await res.json()) as any;
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toMatch(/entry 0/);
+    expect(body.result.content[0].text).not.toMatch(/Cannot read properties/);
+    expect(db.batch).not.toHaveBeenCalled();
   });
 });
