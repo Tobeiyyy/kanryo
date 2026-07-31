@@ -7,10 +7,13 @@ export default function ProjectCard({ p, completed = false }: {
   completed?: boolean;
 }) {
   const open = p.consider_count + p.todo_count;
+  // Nothing left to review or do, but work has happened: the project is resting rather than
+  // finished. Dimmer than an active card, lighter than a completed one, and full opacity on hover.
+  const dormant = !completed && open === 0 && p.done_count > 0;
   return (
     <Link
       to={`/project/${p.id}`}
-      className={`card project-card${completed ? " completed" : ""}`}
+      className={`card project-card${completed ? " completed" : ""}${dormant ? " dormant" : ""}`}
       style={{ "--pc": `var(--p-${p.accent})` } as CSSProperties}
       draggable
       onDragStart={(e) => {

@@ -65,6 +65,9 @@
 .project-card { position: relative; overflow: hidden; }
 .project-card h3 { margin: 0 0 4px; font-size: 16px; }
 
+.project-card.dormant { opacity: 0.6; }
+.project-card.dormant:hover { opacity: 1; }
+
 /* --- completed projects --- */
 .project-card.completed { opacity: 0.55; border-left-color: var(--border); }
 .project-card.completed h3, .project-card.completed .counts { color: var(--tx3); }
