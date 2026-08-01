@@ -76,6 +76,8 @@
 /* Claude refers to projects and tasks by #id; surface the same id in the UI so
    those references are checkable. Muted so it never competes with the title. */
 .id-chip { font-size: 11px; font-weight: 400; color: var(--tx4); margin-left: 6px; font-variant-numeric: tabular-nums; }
+/* Task titles run long; leading id keeps it findable without scanning to the end. */
+.id-chip.lead { margin-left: 0; margin-right: 6px; }
 .tag-filter .label { font-size: 12px; color: var(--tx4); margin-right: 2px; }
 
 .project-card.dormant { opacity: 0.6; }
