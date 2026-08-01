@@ -21,7 +21,7 @@ export default function ProjectCard({ p, completed = false }: {
         e.dataTransfer.effectAllowed = "move";
       }}
     >
-      <h3>{p.icon ? `${p.icon} ` : ""}{p.name}</h3>
+      <h3>{p.icon ? `${p.icon} ` : ""}{p.name}<span className="id-chip">#{p.id}</span></h3>
       <div className="counts">
         {/* Same order as the board columns: review, then to do, then done. */}
         {p.consider_count} to review · {p.todo_count} to do · {p.done_count} done

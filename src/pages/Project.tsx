@@ -154,6 +154,7 @@ export default function Project() {
       <header className="proj-header">
         <h1>
           {project.icon ? `${project.icon} ` : ""}{project.name}
+          <span className="id-chip">#{project.id}</span>
           <button className="icon-btn" title="Edit project" onClick={() => setEditing(!editing)}>✎</button>
         </h1>
         {project.description && <p className="proj-desc">{project.description}</p>}

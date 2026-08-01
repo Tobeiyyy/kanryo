@@ -26,7 +26,7 @@ export default function TaskRow({ task, subtasks, onOpen, draggable = false }: {
         }
       />
       <div style={{ flex: 1 }}>
-        <div className="task-title">{task.title}</div>
+        <div className="task-title">{task.title}<span className="id-chip">#{task.id}</span></div>
         {(task.due_date || task.labels.length > 0 || subtasks.length > 0) && (
           <div className="task-meta">
             {task.due_date && (
