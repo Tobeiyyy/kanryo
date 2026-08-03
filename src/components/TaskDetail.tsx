@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useCreateTask, useDeleteTask, usePatchTask, useProjects } from "../api";
 import type { Task, TaskStatus } from "../../shared/types";
 import type { TaskPatchBody } from "../../worker/taskLogic";
+import Attachments from "./Attachments";
 
 export default function TaskDetail({ task, subtasks, onClose }: {
   task: Task; subtasks: Task[]; onClose: () => void;
@@ -132,6 +133,8 @@ export default function TaskDetail({ task, subtasks, onClose }: {
             + add notes
           </button>
         )}
+
+        <Attachments taskId={task.id} />
 
         <h3 style={{ fontSize: 14, margin: "14px 0 6px" }}>
           Subtasks {subtasks.length > 0 && `(${subtasks.filter((s) => s.status === "done").length}/${subtasks.length})`}

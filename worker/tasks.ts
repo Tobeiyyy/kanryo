@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import type { Env } from "./index";
 import { buildTaskPatch, defaultStatus, touchesGcal, STATUSES, type TaskPatchBody } from "./taskLogic";
 import { queueOrphanFlush, queueSync } from "./gcal";
+import { purgeTaskFiles } from "./attachments";
 import { attachLabels } from "./projects";
 
 type HonoEnv = { Bindings: Env };
@@ -116,6 +117,15 @@ export async function deleteTask(
   const row = await c.env.DB.prepare("SELECT id, title FROM tasks WHERE id = ?")
     .bind(id).first<{ id: number; title: string }>();
   if (!row) return { error: "not found" };
+  // Attachments of this task and its descendants: the rows cascade away, the R2 objects don't.
+  const { results: descendants } = await c.env.DB.prepare(
+    `WITH RECURSIVE sub(id) AS (
+       SELECT id FROM tasks WHERE id = ?1
+       UNION ALL
+       SELECT t.id FROM tasks t JOIN sub s ON t.parent_id = s.id
+     ) SELECT id FROM sub`,
+  ).bind(id).all<{ id: number }>();
+  await purgeTaskFiles(c, descendants.map((d) => d.id));
   // Tombstone the event ids of this task AND its descendants (cascade will delete their rows)
   // in the same batch as the delete itself — spec: failure state written first.
   await c.env.DB.batch([

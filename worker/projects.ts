@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "./index";
 import { queueOrphanFlush } from "./gcal";
+import { purgeTaskFiles } from "./attachments";
 
 type HonoEnv = { Bindings: Env };
 
@@ -95,7 +96,8 @@ projectRoutes.get("/:id", async (c) => {
     "SELECT * FROM project_links WHERE project_id = ? ORDER BY position, id",
   ).bind(id).all()).results;
   const tasks = (await c.env.DB.prepare(
-    "SELECT * FROM tasks WHERE project_id = ? ORDER BY status, position, id",
+    `SELECT t.*, (SELECT COUNT(*) FROM task_attachments a WHERE a.task_id = t.id) AS attachment_count
+     FROM tasks t WHERE t.project_id = ? ORDER BY t.status, t.position, t.id`,
   ).bind(id).all()).results;
   return c.json({ project, links, tasks: await attachLabels(c.env.DB, tasks) });
 });
@@ -135,6 +137,11 @@ projectRoutes.patch("/:id", async (c) => {
 
 projectRoutes.delete("/:id", async (c) => {
   const id = Number(c.req.param("id"));
+  // Same reason as task deletion: cascading rows away would strand the R2 objects.
+  const { results: projectTasks } = await c.env.DB.prepare(
+    "SELECT id FROM tasks WHERE project_id = ?",
+  ).bind(id).all<{ id: number }>();
+  await purgeTaskFiles(c, projectTasks.map((t) => t.id));
   // Same-batch tombstones (spec: failure state written first): capture every event id this
   // cascade will destroy, then delete. flushOrphans reconciles the calendar afterwards.
   await c.env.DB.batch([

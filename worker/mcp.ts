@@ -4,6 +4,7 @@ import type { Env } from "./index";
 import { hmac } from "./auth";
 import { createTask, deleteTask, patchTask } from "./tasks";
 import { ACCENTS, KINDS, attachTags, setProjectTags } from "./projects";
+import { listAttachments } from "./attachments";
 import { logicalDate, resolveEntry, resolveRange, type ResolvedEntry } from "./habitLogic";
 import { applyEntries, readLog } from "./habits";
 
@@ -48,6 +49,24 @@ export const TOOL_DEFS = [
     inputSchema: {
       type: "object",
       properties: { include_completed: { type: "boolean" } },
+    },
+  },
+  {
+    name: "list_task_attachments",
+    description: "List the photos and files attached to a Kanryo task — id, filename, type, size. Call this when the user refers to a screenshot, photo, document or 'the thing I attached' on a task, then use view_attachment to actually look at an image.",
+    inputSchema: {
+      type: "object",
+      properties: { task_id: { type: "integer" } },
+      required: ["task_id"],
+    },
+  },
+  {
+    name: "view_attachment",
+    description: "Fetch one attachment by id and return it for viewing. Images come back as an image you can actually see and reason about (screenshots of bugs, photos of a whiteboard, a receipt); text-like files come back as their text. Get attachment ids from list_task_attachments.",
+    inputSchema: {
+      type: "object",
+      properties: { attachment_id: { type: "integer" } },
+      required: ["attachment_id"],
     },
   },
   {
@@ -233,7 +252,11 @@ export async function handleRpc(
         return rpcError(id, -32602, `unknown tool: ${String(name)}`);
       }
       try {
-        const result = await callTool(name, msg.params?.arguments ?? {});
+        const result: any = await callTool(name, msg.params?.arguments ?? {});
+        // Tools that return real media hand back MCP content blocks instead of JSON text.
+        if (result && Array.isArray(result.__mcp_content)) {
+          return rpcResult(id, { content: result.__mcp_content });
+        }
         return rpcResult(id, { content: [{ type: "text", text: JSON.stringify(result) }] });
       } catch (err) {
         return rpcResult(id, {
@@ -254,6 +277,16 @@ type Ctx = Context<{ Bindings: Env }>;
 class ToolError extends Error {}
 
 const STATUS_VALUES = ["consider", "todo", "done"];
+
+/** Chunked base64 so a multi-MB photo doesn't blow the argument limit of String.fromCharCode. */
+function base64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
+  return btoa(binary);
+}
 
 async function requireProject(c: Ctx, id: unknown): Promise<any> {
   const project = typeof id === "number"
@@ -296,6 +329,38 @@ async function addLinksTo(c: Ctx, projectId: number, links: unknown): Promise<an
 
 async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
   switch (name) {
+    case "list_task_attachments": {
+      if (typeof args.task_id !== "number") throw new ToolError("task_id is required");
+      const files = await listAttachments(c.env.DB, args.task_id);
+      return { attachments: files };
+    }
+    case "view_attachment": {
+      if (typeof args.attachment_id !== "number") throw new ToolError("attachment_id is required");
+      const row = await c.env.DB.prepare(
+        "SELECT key, filename, content_type, size FROM task_attachments WHERE id = ?",
+      ).bind(args.attachment_id).first<{ key: string; filename: string; content_type: string; size: number }>();
+      if (!row) throw new ToolError(`attachment ${args.attachment_id} not found — call list_task_attachments first`);
+      const object = await c.env.BUCKET.get(row.key);
+      if (!object) throw new ToolError(`the stored file for attachment ${args.attachment_id} is missing`);
+      const buf = await object.arrayBuffer();
+      if (row.content_type.startsWith("image/")) {
+        return {
+          __mcp_content: [
+            { type: "text", text: `${row.filename} (${row.content_type}, ${row.size} bytes)` },
+            { type: "image", data: base64(buf), mimeType: row.content_type },
+          ],
+        };
+      }
+      const textual = /^text\/|json|xml|csv|javascript|markdown/.test(row.content_type);
+      return {
+        __mcp_content: [{
+          type: "text",
+          text: textual
+            ? `${row.filename}:\n\n${new TextDecoder().decode(buf).slice(0, 20000)}`
+            : `${row.filename} is a ${row.content_type} file of ${row.size} bytes — not viewable as text or image.`,
+        }],
+      };
+    }
     case "set_project_tags": {
       const project = await requireProject(c, args.project_id);
       if (!Array.isArray(args.tags)) throw new ToolError("tags must be an array of strings (empty array clears them)");

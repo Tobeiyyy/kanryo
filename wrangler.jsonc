@@ -12,5 +12,8 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "kanryo", "database_id": "58313016-ced1-4dc1-8acf-4ef02f6f8218" }
   ],
+  "r2_buckets": [
+    { "binding": "BUCKET", "bucket_name": "kanryo-files" }
+  ],
   "observability": { "enabled": true }
 }

@@ -49,6 +49,16 @@ export interface Task {
   updated_at: string;
   completed_at: string | null;
   labels: string[];
+  attachment_count?: number;
+}
+
+export interface Attachment {
+  id: number;
+  task_id: number;
+  filename: string;
+  content_type: string;
+  size: number;
+  created_at: string;
 }
 
 export interface ProjectDetail {

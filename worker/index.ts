@@ -4,6 +4,7 @@ import { projectRoutes, linkRoutes } from "./projects";
 import { taskRoutes, inboxRoutes } from "./tasks";
 import { gcalRoutes } from "./gcalRoutes";
 import { mcpRoutes } from "./mcp";
+import { attachmentRoutes } from "./attachments";
 import { habitRoutes } from "./habits";
 
 export type Env = {
@@ -14,6 +15,7 @@ export type Env = {
   GCAL_CLIENT_EMAIL: string;
   GCAL_PRIVATE_KEY: string;
   KANRYO_TOKEN: string;
+  BUCKET: R2Bucket;
 };
 
 export type App = Hono<{ Bindings: Env }>;
@@ -61,6 +63,8 @@ app.post("/api/auth/logout", (c) => {
   return c.json({ ok: true });
 });
 
+// Mounted before /api/tasks so /api/tasks/:id/attachments resolves here.
+app.route("/api", attachmentRoutes);
 app.route("/api/projects", projectRoutes);
 app.route("/api/links", linkRoutes);
 app.route("/api/tasks", taskRoutes);

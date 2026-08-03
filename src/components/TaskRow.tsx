@@ -27,7 +27,7 @@ export default function TaskRow({ task, subtasks, onOpen, draggable = false }: {
       />
       <div style={{ flex: 1 }}>
         <div className="task-title"><span className="id-chip lead">#{task.id}</span>{task.title}</div>
-        {(task.due_date || task.labels.length > 0 || subtasks.length > 0) && (
+        {(task.due_date || task.labels.length > 0 || subtasks.length > 0 || (task.attachment_count ?? 0) > 0) && (
           <div className="task-meta">
             {task.due_date && (
               <span className={`due-chip ${overdue ? "overdue" : ""}`}>
@@ -35,6 +35,7 @@ export default function TaskRow({ task, subtasks, onOpen, draggable = false }: {
               </span>
             )}
             {task.labels.map((l) => <span key={l} className="label-chip">{l}</span>)}
+            {(task.attachment_count ?? 0) > 0 && <span title="attachments">📎 {task.attachment_count}</span>}
             {subtasks.length > 0 && <span>{doneSubs}/{subtasks.length}</span>}
           </div>
         )}
