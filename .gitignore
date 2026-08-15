@@ -4,3 +4,4 @@ dist
 .dev.vars
 tsconfig.tsbuildinfo
 gcal-key.json
+.claude/skills/impeccable/
