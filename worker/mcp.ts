@@ -5,8 +5,6 @@ import { hmac } from "./auth";
 import { createTask, deleteTask, patchTask, toBriefTask } from "./tasks";
 import { ACCENTS, KINDS, attachLabels, attachTags, setProjectTags } from "./projects";
 import { listAttachments } from "./attachments";
-import { logicalDate, resolveEntry, resolveRange, type ResolvedEntry } from "./habitLogic";
-import { applyEntries, readLog } from "./habits";
 
 export type RpcMessage = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
 
@@ -204,39 +202,6 @@ export const TOOL_DEFS = [
       type: "object",
       properties: { task_id: { type: "integer" }, project_id: { type: "integer" } },
       required: ["task_id", "project_id"],
-    },
-  },
-  {
-    name: "log_habits",
-    description: "Write entries into the user's habit log — the ONLY path for backdated entries and corrections (the phone Shortcuts write only today). Chunk-scoped merge: each entry names a chunk (morning: up/phone/med/cold/move; workout; read) plus the picked fields — picked become 1, unpicked fields OF THAT CHUNK become 0, fields of chunks not sent stay NULL. NULL means 'not reported' and is deliberately distinct from 0 'reported not done' — never send a chunk just to record absence of data. Translating the user's hand-written lines (e.g. '31.07 up:y phone:y med:n cold:y move:y | workout:- | read:y'): y = picked, n = unpicked in a sent chunk, '-' = OMIT that chunk entirely for that date so it stays NULL. Batches are all-or-nothing: one invalid entry rejects everything with per-entry errors and nothing is written.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        entries: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              date: { type: "string", description: "YYYY-MM-DD, between 2026-07-01 and today (logical day, rolls 04:00 Europe/Berlin)" },
-              chunk: { type: "string", enum: ["morning", "workout", "read"] },
-              picked: { type: "array", items: { type: "string" }, description: "habit fields done that day; must belong to the chunk; empty array = explicit all-no for the chunk" },
-            },
-            required: ["date", "chunk", "picked"],
-          },
-        },
-      },
-      required: ["entries"],
-    },
-  },
-  {
-    name: "get_habit_log",
-    description: "Read the user's raw habit log for a date range (default: the last 14 logical days including today; the day rolls at 04:00 Europe/Berlin). Returns exactly one row per date in the range — days never logged come back with every field null. null means 'not reported', deliberately distinct from 0 ('reported not done'); don't collapse them when summarizing. Values are raw 0/1/null with no aggregation, targets or streaks — this is baseline data; count and interpret in-session. Max span 366 days.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        from: { type: "string", description: "YYYY-MM-DD" },
-        to: { type: "string", description: "YYYY-MM-DD" },
-      },
     },
   },
 ];
@@ -559,27 +524,6 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
       const r = await patchTask(c, args.task_id, { project_id: project.id });
       if (r.error) throw new ToolError(`task ${args.task_id}: ${r.error}`);
       return { task: r.task, project: project.name };
-    }
-    case "log_habits": {
-      if (!Array.isArray(args.entries) || args.entries.length === 0) {
-        throw new ToolError("entries array is required and must be non-empty");
-      }
-      const today = logicalDate();
-      const resolved: ResolvedEntry[] = [];
-      const errors: string[] = [];
-      args.entries.forEach((e: any, i: number) => {
-        const r = resolveEntry(e, today, true);
-        if (r.error) errors.push(`entry ${i}: ${r.error}`);
-        else resolved.push(r.resolved!);
-      });
-      if (errors.length > 0) throw new ToolError(`nothing written — ${errors.join("; ")}`);
-      await applyEntries(c.env.DB, resolved);
-      return { written: resolved.length, dates: [...new Set(resolved.map((r) => r.date))].sort() };
-    }
-    case "get_habit_log": {
-      const { error, from, to } = resolveRange(args, logicalDate());
-      if (error) throw new ToolError(error);
-      return { from, to, days: await readLog(c.env.DB, from!, to!) };
     }
     default:
       throw new ToolError(`unhandled tool: ${name}`);
