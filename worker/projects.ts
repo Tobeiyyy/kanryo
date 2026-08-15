@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "./index";
 import { queueOrphanFlush } from "./gcal";
 import { purgeTaskFiles } from "./attachments";
+import { toBriefTask } from "./tasks";
 
 type HonoEnv = { Bindings: Env };
 
@@ -99,7 +100,11 @@ projectRoutes.get("/:id", async (c) => {
     `SELECT t.*, (SELECT COUNT(*) FROM task_attachments a WHERE a.task_id = t.id) AS attachment_count
      FROM tasks t WHERE t.project_id = ? ORDER BY t.status, t.position, t.id`,
   ).bind(id).all()).results;
-  return c.json({ project, links, tasks: await attachLabels(c.env.DB, tasks) });
+  const withLabels = await attachLabels(c.env.DB, tasks);
+  // ?brief=1 swaps full notes for their first line — enough to orient, cheap enough to read
+  // several projects. Default is unchanged so existing callers keep working.
+  const brief = c.req.query("brief") === "1" || c.req.query("brief") === "true";
+  return c.json({ project, links, tasks: brief ? withLabels.map(toBriefTask) : withLabels });
 });
 
 const PROJECT_FIELDS = ["name", "description", "accent", "icon", "status"] as const;

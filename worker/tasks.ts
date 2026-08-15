@@ -20,6 +20,25 @@ inboxRoutes.get("/", async (c) => {
 
 export type CreateTaskBody = TaskPatchBody & { title?: string };
 
+const NOTE_PREVIEW_CHARS = 200;
+
+/**
+ * Skim shape for a task: everything except the full notes body, which is replaced by its first
+ * line. Reading a whole project used to mean pulling every note in full — one project could eat
+ * a session's context. The full note stays available via GET /api/tasks/{id}.
+ */
+export function toBriefTask(t: any): any {
+  const notes: string | null = t.notes ?? null;
+  const firstLine = notes ? notes.split("\n").find((l: string) => l.trim().length > 0) ?? "" : "";
+  const preview = firstLine.slice(0, NOTE_PREVIEW_CHARS);
+  const { notes: _dropped, ...rest } = t;
+  return {
+    ...rest,
+    notes_preview: preview || null,
+    notes_truncated: !!notes && (notes.trim().length > preview.length),
+  };
+}
+
 /** Shared insert path for the REST route and the MCP tools — one source of truth
     for validation, status default, born-dirty gcal flag, position, labels, sync. */
 export async function createTask(

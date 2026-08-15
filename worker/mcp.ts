@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Env } from "./index";
 import { hmac } from "./auth";
-import { createTask, deleteTask, patchTask } from "./tasks";
-import { ACCENTS, KINDS, attachTags, setProjectTags } from "./projects";
+import { createTask, deleteTask, patchTask, toBriefTask } from "./tasks";
+import { ACCENTS, KINDS, attachLabels, attachTags, setProjectTags } from "./projects";
 import { listAttachments } from "./attachments";
 import { logicalDate, resolveEntry, resolveRange, type ResolvedEntry } from "./habitLogic";
 import { applyEntries, readLog } from "./habits";
@@ -62,7 +62,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "view_attachment",
-    description: "Fetch one attachment by id and return it for viewing. Images come back as an image you can actually see and reason about (screenshots of bugs, photos of a whiteboard, a receipt); text-like files come back as their text. Get attachment ids from list_task_attachments.",
+    description: "Fetch one attachment by id and return it for use. Images come back as an image you can actually see and reason about (a screenshot of a bug, a photo of a whiteboard, a receipt). Text files come back as text. Office documents and other binaries (xlsx, docx, pdf, zip) come back as base64 with instructions — decode them to a real file and open them with the matching tool rather than reading the base64. Files over 256 KB return a download instruction instead. Get attachment ids from list_task_attachments.",
     inputSchema: {
       type: "object",
       properties: { attachment_id: { type: "integer" } },
@@ -95,14 +95,24 @@ export const TOOL_DEFS = [
   },
   {
     name: "list_tasks",
-    description: "List the tasks in a Kanryo project, optionally filtered by status. Use it to answer questions like 'what's on my review list', to check whether something is already tracked before adding a duplicate, and to get the task_id needed by set_task_status. Kanryo's three states: consider (shown in the app as 'To review') = the user wants to think it through, typically in a conversation with Claude, or hasn't committed; todo = decided, waiting to be done; done = finished. The status values on the wire are always consider/todo/done.",
+    description: "List the tasks in a Kanryo project, optionally filtered by status. Use it to answer questions like 'what's on my review list', to check whether something is already tracked before adding a duplicate, and to get the task_id needed by set_task_status. PASS brief: true to skim — it returns each task's title, status and only the FIRST LINE of its notes, which is what you want when orienting yourself on a project or looking at more than one project; then fetch the single task you actually care about for its full notes. Kanryo's three states: consider (shown in the app as 'To review') = the user wants to think it through, typically in a conversation with Claude, or hasn't committed; todo = decided, waiting to be done; done = finished. The status values on the wire are always consider/todo/done.",
     inputSchema: {
       type: "object",
       properties: {
         project_id: { type: "integer" },
         status: { type: "string", enum: ["consider", "todo", "done"] },
+        brief: { type: "boolean", description: "title + status + first note line only; much cheaper to read" },
       },
       required: ["project_id"],
+    },
+  },
+  {
+    name: "get_task",
+    description: "Fetch ONE task in full, including its complete notes and labels. Use this after a brief list_tasks when you need the whole story of a specific task.",
+    inputSchema: {
+      type: "object",
+      properties: { task_id: { type: "integer" } },
+      required: ["task_id"],
     },
   },
   {
@@ -278,6 +288,30 @@ class ToolError extends Error {}
 
 const STATUS_VALUES = ["consider", "todo", "done"];
 
+/** Biggest binary we inline as base64; beyond this the caller is told to download it. */
+const MAX_INLINE_BYTES = 256 * 1024;
+
+/**
+ * Strict text detection. The old loose regex matched "xml" inside
+ * "application/vnd.openxmlformats-officedocument..." and happily decoded xlsx ZIP bytes as
+ * UTF-8, which is exactly how binary garbage ended up in a chat.
+ */
+export function isTextual(contentType: string, filename: string): boolean {
+  const ct = contentType.toLowerCase().split(";")[0].trim();
+  if (ct.startsWith("text/")) return true;
+  const exact = [
+    "application/json", "application/ld+json", "application/xml", "application/xhtml+xml",
+    "application/javascript", "application/x-ndjson", "application/sql", "application/yaml",
+    "image/svg+xml",
+  ];
+  if (exact.includes(ct)) return true;
+  // Fall back to the extension only when the server gave us a generic type.
+  if (ct === "application/octet-stream" || ct === "") {
+    return /\.(txt|md|markdown|csv|tsv|json|ya?ml|toml|ini|cfg|log|sql|ts|tsx|js|jsx|py|rb|go|rs|sh|ps1|html?|css)$/i.test(filename);
+  }
+  return false;
+}
+
 /** Chunked base64 so a multi-MB photo doesn't blow the argument limit of String.fromCharCode. */
 function base64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
@@ -351,13 +385,30 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
           ],
         };
       }
-      const textual = /^text\/|json|xml|csv|javascript|markdown/.test(row.content_type);
+      if (isTextual(row.content_type, row.filename)) {
+        return {
+          __mcp_content: [{ type: "text", text: `${row.filename}:\n\n${new TextDecoder().decode(buf).slice(0, 20000)}` }],
+        };
+      }
+      // Binary (xlsx, docx, pdf, zip, ...). Hand back base64 so the caller can reconstruct the
+      // real file and open it with a proper reader, instead of decoding ZIP bytes as text.
+      const origin = new URL(c.req.url).origin;
+      if (buf.byteLength <= MAX_INLINE_BYTES) {
+        return {
+          __mcp_content: [{
+            type: "text",
+            text: `${row.filename} (${row.content_type}, ${row.size} bytes) is a binary file, returned as base64.\n`
+              + `To use it: decode the base64 below into a file named "${row.filename}" and open it with the tool that fits the format `
+              + `(xlsx/docx/pdf skills in chat; in Claude Code write it to disk and read it there). Do not try to read the base64 itself.\n\n`
+              + `BASE64 ${row.filename}\n${base64(buf)}`,
+          }],
+        };
+      }
       return {
         __mcp_content: [{
           type: "text",
-          text: textual
-            ? `${row.filename}:\n\n${new TextDecoder().decode(buf).slice(0, 20000)}`
-            : `${row.filename} is a ${row.content_type} file of ${row.size} bytes — not viewable as text or image.`,
+          text: `${row.filename} (${row.content_type}, ${row.size} bytes) is larger than the ${Math.round(MAX_INLINE_BYTES / 1024)} KB inline limit.\n`
+            + `Download it instead: GET ${origin}/api/attachments/${args.attachment_id} with the Kanryo bearer token, save it as "${row.filename}", then open it locally.`,
         }],
       };
     }
@@ -436,7 +487,16 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
             `SELECT id, title, status, priority, due_date, due_time, parent_id, notes
              FROM tasks WHERE project_id = ? ORDER BY status, position, id`,
           ).bind(project.id).all();
-      return { project: project.name, tasks: results };
+      const tasks = args.brief === true ? results.map(toBriefTask) : results;
+      return { project: project.name, brief: args.brief === true, tasks };
+    }
+    case "get_task": {
+      if (typeof args.task_id !== "number") throw new ToolError("task_id is required");
+      const row = await c.env.DB.prepare("SELECT * FROM tasks WHERE id = ?").bind(args.task_id).first<any>();
+      if (!row) throw new ToolError(`task ${args.task_id} not found`);
+      const [withLabels] = await attachLabels(c.env.DB, [row]);
+      const files = await listAttachments(c.env.DB, args.task_id);
+      return { task: withLabels, attachments: files };
     }
     case "set_task_status": {
       const ids = Array.isArray(args.task_ids) ? args.task_ids.filter((x: unknown) => typeof x === "number") : [];
