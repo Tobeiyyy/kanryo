@@ -1,58 +1,62 @@
 # Kanryo
 
-A kanban board for one person, running on Cloudflare's free tier. It installs on
-your phone as a PWA and serves an MCP endpoint, so Claude reads and writes the same
-board you tap on. 完了 (*kanryo*) means "completed".
+If you combine a kanban board, a notes inbox and Claude's memory you would probably
+get something like Kanryo. It is a project board for exactly one person, it runs on
+Cloudflare's free tier, and it serves an MCP endpoint so every Claude surface reads
+and writes the same board I tap on my phone. 完了 (*kanryo*) means "completed".
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
-## Why
+## Why I built this
 
-I did not need a team tool. I needed somewhere to put ideas at 11pm without filling
+I did not need a team tool. I needed a place to throw ideas at 11pm without filling
 in five fields first, and I wanted Claude to still know about them next week.
 
-That second half is really why this exists. Chats forget. Claude Code forgets. I got
-tired of re-explaining the same project every time I opened a new conversation, so
-the board became the memory instead: a chat can look up what is still open, close
-something when we finish it, or read a note I wrote in June and have not thought
-about since.
+That second part is the real reason this exists. Chats forget. Claude Code forgets.
+I got really tired of re-explaining my own projects to a model that helped me build
+them, so the board became the memory instead. A chat can look up what is still open,
+close a task when we finish something, or read a note I wrote in June and completely
+forgot about. Is that overkill for a to-do list? Probably. It also works.
 
 ## What it does
 
 Tasks sit in three columns: to review, to do, done. New ones land in "to review",
-which is my way of saying I have not committed to it yet. That column turned into a
-list of things I want to talk through with Claude, and the to-do column stayed
-believable as a result.
+which is my way of saying I have not committed to this yet. That column turned into
+a list of things I want to talk through with Claude first, and honestly, that one
+rule is what keeps the to-do column believable.
 
 ![Project board](docs/screenshots/project-board.png)
 
-Capture is one box at the top of the dashboard. Type the thought, press enter, about
-five seconds on a phone. No project, no priority, nothing to fill in. Whatever you
-type is mirrored to localStorage as you type it and kept with a retry if the request
-fails, because losing an idea to a tunnel once was enough.
+Capture is one box at the top of the dashboard. Type the thought, press enter,
+about five seconds on a phone. No project, no priority, nothing to fill in. It
+lands in an inbox and gets sorted later, by me in one tap or by Claude when I ask
+it to triage. Whatever you type is mirrored to localStorage on every keystroke and
+kept with a visible retry if the request fails. I lost exactly one idea to a train
+tunnel and never again.
 
-Projects carry a description, tags, and links, which can be a repo, a live URL, a
-Windows folder path or a Claude chat. Tags also filter the dashboard.
+Projects hold a description, tags and links: a repo, a live URL, a folder path on
+your machine, a Claude chat. Tags group related projects and filter the dashboard.
 
-Tasks have the usual priorities, labels, subtasks and due dates. You can attach
-photos and files, which go to R2; images get downscaled in the browser first, since
-a 6MB phone photo helps nobody. Claude can look at those attachments, which is
-oddly handy for screenshots of your own bugs.
+Tasks have priorities, labels, subtasks, due dates and attachments. Photos and
+files go to R2, images get downscaled in the browser first cause a 6MB phone photo
+helps nobody. Claude can actually look at the attachments, which sounds like a
+gimmick and really isn't. I screenshot a bug on my phone, attach it, and a chat two
+days later can see exactly what I saw.
 
-Give a task a due date and it shows up as an event on a Google Calendar you set
-aside for it. Finish the task and the event disappears. All the reminding is
-Google's job.
+Give a task a due date and it appears as an event on a Google Calendar you set
+aside for it. Finish the task, the event disappears. All the reminding is Google's
+job, so this app sends no notifications at all.
 
-Finished projects fold into a drawer at the bottom. Projects with nothing open left
-just fade out where they are.
+Finished projects fold into a drawer at the bottom of the dashboard. Projects with
+nothing open left just fade out where they stand.
 
 ![Task detail](docs/screenshots/task-detail.png)
 
 ## Stack
 
-React 18, Vite, TypeScript, Hono on Cloudflare Workers, D1, R2, and plain CSS with
-design tokens. TanStack Query is the only real dependency in the frontend. At one
-person's volume it all sits inside the free tier.
+React 18, Vite, TypeScript, Hono on Cloudflare Workers, D1, R2, plain CSS with
+design tokens. TanStack Query is the only real frontend dependency. At one person's
+volume everything fits in the free tier.
 
 ## Setup
 
@@ -63,82 +67,75 @@ git clone https://github.com/Tobeiyyy/kanryo.git
 cd kanryo
 npm install
 npx wrangler login
+npm run setup
 ```
 
-Create the database and the bucket:
+`npm run setup` creates the D1 database and R2 bucket, writes the database id into
+`wrangler.jsonc`, sets the secrets (asks for a password or generates one), applies
+the schema and deploys. At the end it prints your app URL, your login password and
+your Claude connector URL. That's the whole install.
+
+On a phone: open the URL, log in, Share, "Add to Home Screen".
+
+<details>
+<summary>Manual setup, if you'd rather see every step</summary>
 
 ```bash
-npx wrangler d1 create kanryo
+npx wrangler d1 create kanryo          # put the printed database_id into wrangler.jsonc
 npx wrangler r2 bucket create kanryo-files
-```
-
-Put the `database_id` that the first command prints into `wrangler.jsonc`, replacing
-the one already there. Then apply the schema:
-
-```bash
-npm run migrate:remote      # npm run migrate:local for local dev
-```
-
-Set three secrets:
-
-```bash
-npx wrangler secret put APP_PASSWORD    # what you log in with
-npx wrangler secret put AUTH_SECRET     # any long random string
-npx wrangler secret put KANRYO_TOKEN    # long random hex, used by Claude below
+npm run migrate:remote
+npx wrangler secret put APP_PASSWORD   # what you log in with
+npx wrangler secret put AUTH_SECRET    # any long random string
+npx wrangler secret put KANRYO_TOKEN   # long random hex, used by Claude
+npm run deploy
 ```
 
 Windows note: piping a string into `wrangler secret put` in PowerShell appends a
 newline and quietly corrupts the value. Use `npx wrangler secret bulk secrets.json`.
 
-Deploy:
-
-```bash
-npm run deploy
-```
-
-Open the `*.workers.dev` URL it prints, log in with `APP_PASSWORD`, and on a phone
-use Share, then "Add to Home Screen".
+</details>
 
 ## Google Calendar (optional)
 
 Kanryo writes to one calendar you set aside for it through a service account, so
-there is no OAuth flow and nothing to refresh.
+there is no OAuth flow and nothing to refresh. This is the fiddliest part of the
+whole setup, and it is skippable.
 
-1. In Google Cloud, pick or create a project, enable the Google Calendar API, create
-   a service account and download a JSON key. It needs no IAM roles.
+1. In Google Cloud: pick or create a project, enable the Google Calendar API,
+   create a service account, download a JSON key. It needs no IAM roles.
 2. Set two secrets from that file:
    ```bash
    npx wrangler secret put GCAL_CLIENT_EMAIL   # client_email
    npx wrangler secret put GCAL_PRIVATE_KEY    # private_key, newlines included
    ```
-3. In Google Calendar, create a calendar and share it with the service account's
-   email address, giving it "Make changes to events".
+3. In Google Calendar: create a calendar, share it with the service account's email
+   address, give it "Make changes to events".
 4. Paste that calendar's ID into Kanryo's settings page.
 
-Due dates then appear on that calendar within seconds. With a time it becomes a 30
-minute event, otherwise it is all day.
+Due dates then show up on that calendar within seconds. With a time it becomes a
+30 minute event, otherwise all day.
 
 ## Using it with Claude
 
 The worker serves MCP at `/mcp/<KANRYO_TOKEN>`, with tools for reading and writing
 projects and tasks, filing inbox items, tagging, and viewing attachments.
 
-In claude.ai, go to Settings, then Connectors, and add a custom connector pointing
-at:
+In claude.ai: Settings, Connectors, add a custom connector pointing at
 
 ```
 https://<your-worker>.workers.dev/mcp/<KANRYO_TOKEN>
 ```
 
-The token sits in the path and is what authenticates the call, so treat the whole
-URL like a password.
+The token in the path is the authentication, so treat that whole URL like a
+password. (`npm run setup` prints it ready to paste.)
 
-Then there is [`skill/SKILL.md`](skill/SKILL.md), which matters more than the tools
-did. It tells Claude to close a task the moment you say you finished it, and to ask
-first before creating or deleting anything. My first version asked permission for
-every single write and I stopped using it within a day. Replace the placeholder URL
-inside, zip it in a folder called `kanryo`, and upload it under Settings,
-Capabilities, Skills. Claude Code reads it from `~/.claude/skills/kanryo/` instead.
+Then there is [`skill/SKILL.md`](skill/SKILL.md), and I would argue it matters more
+than the tools do. It tells Claude to close a task the moment you say you finished
+it, no asking, but to always ask before creating or deleting anything. My first
+version asked permission for every single write. I stopped using it within a day.
+Replace the placeholder URL inside, zip it in a folder called `kanryo`, upload it
+under Settings, Capabilities, Skills. Claude Code reads it from
+`~/.claude/skills/kanryo/` instead.
 
 After that a chat can handle "what is on my review list for the recipe app" or "we
 finished the offline mode, mark it done".
@@ -147,21 +144,19 @@ finished the offline mode, mark it done".
 
 ## Decisions that might look like gaps
 
-There is one password and one bearer token, and that is the whole auth model. Adding
-accounts would drag in a user table, sessions and per-row ownership to serve exactly
-one person.
+One password, one bearer token, that is the whole auth model. Accounts would mean a
+user table, sessions and per-row ownership, for exactly one user. No.
 
-Recurring tasks are missing on purpose. I tried them, hated the noise, and moved
-habits somewhere else.
+Recurring tasks are missing on purpose. I tried them, hated the noise, and moved my
+habits somewhere else entirely.
 
-Push notifications are missing for a duller reason: Google Calendar already sends
-them, and I did not want to build a second thing that pings my phone.
+No push notifications either, for a duller reason: Google Calendar already sends
+them and I refuse to build a second thing that pings my phone.
 
-Calendar sync writes its failure state before it tries anything. A change that
-affects an event marks the task dirty in the same database write, then converges in
-the background. If the worker dies halfway the flag survives and the next app load
-picks it up again. Deleted tasks leave a tombstone behind so their event can still
-be cleaned up.
+Calendar sync writes its failure state first. Any change that affects an event
+marks the task dirty in the same database write, then converges in the background.
+If the worker dies halfway, the flag survives and the next app load retries.
+Deleted tasks leave a tombstone so their event still gets cleaned up.
 
 ## Development
 
@@ -171,8 +166,15 @@ npm test           # vitest
 npm run check      # typecheck
 ```
 
-The dev server uses a local database, so seed it with whatever nonsense you like
-without touching the real board.
+The dev server uses a local database, so seed it with whatever nonsense you like.
+
+## Who this is for
+
+If you just want a kanban board there are a hundred better maintained ones. The
+people who will get something out of Kanryo are the ones already living half their
+projects inside Claude, who are tired of every chat starting from zero. For that
+specific problem, this is the best tool I know of, mostly because I built it around
+exactly that annoyance.
 
 ## License
 
