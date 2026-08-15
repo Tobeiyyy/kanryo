@@ -1,6 +1,16 @@
 import type { TaskStatus } from "../shared/types";
 
-export const STATUSES: readonly TaskStatus[] = ["consider", "todo", "done"];
+export const STATUSES: readonly TaskStatus[] = ["review", "todo", "done"];
+
+/**
+ * The first state was called `consider` until 2026-08-15. MCP clients cache tool schemas, so a
+ * chat that connected before the rename can still send the old value; accept it and store the
+ * new one rather than failing the write.
+ */
+export function normalizeStatus(status: unknown): string | undefined {
+  if (typeof status !== "string") return undefined;
+  return status === "consider" ? "review" : status;
+}
 
 export type TaskPatchBody = {
   title?: string;
@@ -16,15 +26,16 @@ export type TaskPatchBody = {
 };
 
 /**
- * Everything lands in `consider` unless it explicitly says otherwise: most captured things
+ * Everything lands in `review` unless it explicitly says otherwise: most captured things
  * still need a conversation before they are real work. Only a caller that knows the task was
  * already decided passes `todo`.
  */
 export function defaultStatus(body: { project_id?: number | null; status?: string }): TaskStatus {
-  if (body.status && (STATUSES as readonly string[]).includes(body.status)) {
-    return body.status as TaskStatus;
+  const status = normalizeStatus(body.status);
+  if (status && (STATUSES as readonly string[]).includes(status)) {
+    return status as TaskStatus;
   }
-  return "consider";
+  return "review";
 }
 
 const PATCHABLE = [

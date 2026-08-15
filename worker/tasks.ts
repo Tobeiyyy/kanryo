@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Env } from "./index";
-import { buildTaskPatch, defaultStatus, touchesGcal, STATUSES, type TaskPatchBody } from "./taskLogic";
+import { buildTaskPatch, defaultStatus, normalizeStatus, touchesGcal, STATUSES, type TaskPatchBody } from "./taskLogic";
+import type { TaskStatus } from "../shared/types";
 import { queueOrphanFlush, queueSync } from "./gcal";
 import { purgeTaskFiles } from "./attachments";
 import { attachLabels } from "./projects";
@@ -46,8 +47,10 @@ export async function createTask(
 ): Promise<{ task?: any; error?: string }> {
   const title = body.title?.trim();
   if (!title) return { error: "title required" };
-  if (body.status !== undefined && !STATUSES.includes(body.status)) return { error: "bad status" };
-  const status = defaultStatus(body);
+  // Map the pre-rename value before validating, so MCP clients holding a cached schema still work.
+  const asked = normalizeStatus(body.status) as TaskStatus | undefined;
+  if (body.status !== undefined && !(asked && STATUSES.includes(asked))) return { error: "bad status" };
+  const status = defaultStatus({ ...body, status: asked });
   // due date present -> event desired -> born dirty (failure state precedes the sync attempt)
   const dirty = body.due_date ? 1 : 0;
   const row = await c.env.DB.prepare(
@@ -102,7 +105,11 @@ taskRoutes.post("/positions", async (c) => {
 export async function patchTask(
   c: Context<{ Bindings: Env }>, id: number, body: TaskPatchBody,
 ): Promise<{ task?: any; error?: string }> {
-  if ("status" in body && !STATUSES.includes(body.status!)) return { error: "bad status" };
+  if ("status" in body) {
+    const asked = normalizeStatus(body.status) as TaskStatus | undefined;
+    if (!asked || !STATUSES.includes(asked)) return { error: "bad status" };
+    body = { ...body, status: asked };
+  }
   const { sets, values, labels } = buildTaskPatch(body);
   const dirty = touchesGcal(body);
   if (dirty) sets.push("gcal_dirty = 1");

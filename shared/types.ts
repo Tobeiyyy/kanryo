@@ -1,4 +1,4 @@
-export type TaskStatus = "consider" | "todo" | "done";
+export type TaskStatus = "review" | "todo" | "done";
 export type LinkKind = "repo" | "live" | "storage" | "claude" | "other";
 export type AccentKey =
   | "teal" | "coral" | "violet" | "blue" | "amber" | "rose" | "green" | "slate";
@@ -16,7 +16,7 @@ export interface Project {
 }
 
 export interface ProjectSummary extends Project {
-  consider_count: number;
+  review_count: number;
   todo_count: number;
   done_count: number;
   next_due: string | null;

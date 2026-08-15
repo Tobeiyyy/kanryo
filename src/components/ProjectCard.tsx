@@ -6,7 +6,7 @@ export default function ProjectCard({ p, completed = false }: {
   p: ProjectSummary;
   completed?: boolean;
 }) {
-  const open = p.consider_count + p.todo_count;
+  const open = p.review_count + p.todo_count;
   // Nothing left to review or do, but work has happened: the project is resting rather than
   // finished. Dimmer than an active card, lighter than a completed one, and full opacity on hover.
   const dormant = !completed && open === 0 && p.done_count > 0;
@@ -24,7 +24,7 @@ export default function ProjectCard({ p, completed = false }: {
       <h3>{p.icon ? `${p.icon} ` : ""}{p.name}<span className="id-chip">#{p.id}</span></h3>
       <div className="counts">
         {/* Same order as the board columns: review, then to do, then done. */}
-        {p.consider_count} to review · {p.todo_count} to do · {p.done_count} done
+        {p.review_count} to review · {p.todo_count} to do · {p.done_count} done
       </div>
       {p.tags?.length > 0 && (
         <div className="tag-row">

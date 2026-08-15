@@ -156,8 +156,6 @@ the task dirty in the same database write, then converges in the background. If 
 worker dies mid-sync the flag is still set and the next app load retries it. Deleted
 tasks leave a tombstone so their event can still be removed afterwards.
 
-The UI says "to review" but the stored status value is still `consider`. Renaming it
-would mean rebuilding the table for the sake of a label.
 
 ## Development
 

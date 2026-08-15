@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import type { Env } from "./index";
 import { hmac } from "./auth";
 import { createTask, deleteTask, patchTask, toBriefTask } from "./tasks";
+import { normalizeStatus } from "./taskLogic";
 import { ACCENTS, KINDS, attachLabels, attachTags, setProjectTags } from "./projects";
 import { listAttachments } from "./attachments";
 
@@ -21,7 +22,7 @@ const TASK_ITEM_SCHEMA = {
   type: "object",
   properties: {
     title: { type: "string" },
-    status: { type: "string", enum: ["consider", "todo"], description: "consider = the app's 'To review' column: the user still wants to think it through (usually by talking it over with Claude) or hasn't committed to doing it. Always send the literal value 'consider' for it, even though the UI calls it review. todo = already discussed and decided in this conversation, just needs doing. DEFAULT IS consider — pass todo explicitly for work the user has actually decided on." },
+    status: { type: "string", enum: ["review", "todo"], description: "review = the user still wants to think it through (usually by talking it over with Claude) or hasn't committed to doing it. todo = already discussed and decided in this conversation, just needs doing. DEFAULT IS review — pass todo explicitly for work the user has actually decided on." },
     priority: { type: "integer", minimum: 0, maximum: 3 },
     due_date: { type: "string", description: "YYYY-MM-DD — the day the user wants this on their calendar" },
     due_time: { type: "string", description: "HH:MM, only with due_date" },
@@ -93,12 +94,12 @@ export const TOOL_DEFS = [
   },
   {
     name: "list_tasks",
-    description: "List the tasks in a Kanryo project, optionally filtered by status. Use it to answer questions like 'what's on my review list', to check whether something is already tracked before adding a duplicate, and to get the task_id needed by set_task_status. PASS brief: true to skim — it returns each task's title, status and only the FIRST LINE of its notes, which is what you want when orienting yourself on a project or looking at more than one project; then fetch the single task you actually care about for its full notes. Kanryo's three states: consider (shown in the app as 'To review') = the user wants to think it through, typically in a conversation with Claude, or hasn't committed; todo = decided, waiting to be done; done = finished. The status values on the wire are always consider/todo/done.",
+    description: "List the tasks in a Kanryo project, optionally filtered by status. Use it to answer questions like 'what's on my review list', to check whether something is already tracked before adding a duplicate, and to get the task_id needed by set_task_status. PASS brief: true to skim — it returns each task's title, status and only the FIRST LINE of its notes, which is what you want when orienting yourself on a project or looking at more than one project; then fetch the single task you actually care about for its full notes. Kanryo's three states: review = the user wants to think it through, typically in a conversation with Claude, or hasn't committed; todo = decided, waiting to be done; done = finished. The status values are always review/todo/done.",
     inputSchema: {
       type: "object",
       properties: {
         project_id: { type: "integer" },
-        status: { type: "string", enum: ["consider", "todo", "done"] },
+        status: { type: "string", enum: ["review", "todo", "done"] },
         brief: { type: "boolean", description: "title + status + first note line only; much cheaper to read" },
       },
       required: ["project_id"],
@@ -115,19 +116,19 @@ export const TOOL_DEFS = [
   },
   {
     name: "set_task_status",
-    description: "Move one or more Kanryo tasks between the three states. OFFER this (never do it silently) when: work just finished on something tracked (todo -> done); a 'to review' item (status value: consider) was talked through and the user decided to go ahead (consider -> todo) or is postponing it again; or the user says something is finished. Marking a task done also removes its Google Calendar event automatically. Get task_ids from list_tasks.",
+    description: "Move one or more Kanryo tasks between the three states. OFFER this (never do it silently) when: work just finished on something tracked (todo -> done); a 'to review' item (status value: review) was talked through and the user decided to go ahead (review -> todo) or is postponing it again; or the user says something is finished. Marking a task done also removes its Google Calendar event automatically. Get task_ids from list_tasks.",
     inputSchema: {
       type: "object",
       properties: {
         task_ids: { type: "array", items: { type: "integer" } },
-        status: { type: "string", enum: ["consider", "todo", "done"] },
+        status: { type: "string", enum: ["review", "todo", "done"] },
       },
       required: ["task_ids", "status"],
     },
   },
   {
     name: "create_project",
-    description: "Create a new Kanryo project, optionally seeded with tasks and links. Offer this when a conversation has produced a concrete project-worthy idea — ask the user before calling. Seeded tasks default to consider (the 'To review' column); pass status 'todo' only for steps the user actually decided on in the conversation.",
+    description: "Create a new Kanryo project, optionally seeded with tasks and links. Offer this when a conversation has produced a concrete project-worthy idea — ask the user before calling. Seeded tasks default to review; pass status 'todo' only for steps the user actually decided on in the conversation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -144,7 +145,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "add_tasks",
-    description: "Add tasks to an existing Kanryo project (get project_id from list_projects). Offer this when discussion surfaces new actionable work for something already tracked — ask the user before calling. Tasks default to consider (the 'To review' column); pass status 'todo' only for work the user has actually decided on.",
+    description: "Add tasks to an existing Kanryo project (get project_id from list_projects). Offer this when discussion surfaces new actionable work for something already tracked — ask the user before calling. Tasks default to review; pass status 'todo' only for work the user has actually decided on.",
     inputSchema: {
       type: "object",
       properties: { project_id: { type: "integer" }, tasks: { type: "array", items: TASK_ITEM_SCHEMA } },
@@ -197,7 +198,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "file_inbox_item",
-    description: "Move ONE inbox item out of the Kanryo inbox onto a project — the same thing the user does by hand on the Inbox page. Get task_id from list_inbox and project_id from list_projects. The item keeps its consider status, so it lands in the project's 'To review' column. Only works on unfiled inbox items: it refuses a task that already belongs to a project, so it can never re-parent established work.",
+    description: "Move ONE inbox item out of the Kanryo inbox onto a project — the same thing the user does by hand on the Inbox page. Get task_id from list_inbox and project_id from list_projects. The item keeps its review status, so it lands in the project's 'To review' column. Only works on unfiled inbox items: it refuses a task that already belongs to a project, so it can never re-parent established work.",
     inputSchema: {
       type: "object",
       properties: { task_id: { type: "integer" }, project_id: { type: "integer" } },
@@ -251,7 +252,7 @@ type Ctx = Context<{ Bindings: Env }>;
 
 class ToolError extends Error {}
 
-const STATUS_VALUES = ["consider", "todo", "done"];
+const STATUS_VALUES = ["review", "todo", "done"];
 
 /** Biggest binary we inline as base64; beyond this the caller is told to download it. */
 const MAX_INLINE_BYTES = 256 * 1024;
@@ -389,7 +390,7 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
       const includeCompleted = args.include_completed === true;
       const { results } = await c.env.DB.prepare(
         `SELECT p.id, p.name, p.description, p.icon, p.accent, p.completed_at,
-           COUNT(CASE WHEN t.status = 'consider' AND t.parent_id IS NULL THEN 1 END) AS consider_count,
+           COUNT(CASE WHEN t.status = 'review' AND t.parent_id IS NULL THEN 1 END) AS review_count,
            COUNT(CASE WHEN t.status = 'todo' AND t.parent_id IS NULL THEN 1 END) AS todo_count,
            COUNT(CASE WHEN t.status = 'done' AND t.parent_id IS NULL THEN 1 END) AS done_count
          FROM projects p LEFT JOIN tasks t ON t.project_id = p.id
@@ -441,8 +442,8 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
     }
     case "list_tasks": {
       const project = await requireProject(c, args.project_id);
-      const status = typeof args.status === "string" ? args.status : null;
-      if (status && !STATUS_VALUES.includes(status)) throw new ToolError("status must be consider, todo or done");
+      const status = normalizeStatus(args.status) ?? null;
+      if (status && !STATUS_VALUES.includes(status)) throw new ToolError("status must be review, todo or done");
       const { results } = status
         ? await c.env.DB.prepare(
             `SELECT id, title, status, priority, due_date, due_time, parent_id, notes
@@ -466,10 +467,11 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
     case "set_task_status": {
       const ids = Array.isArray(args.task_ids) ? args.task_ids.filter((x: unknown) => typeof x === "number") : [];
       if (ids.length === 0) throw new ToolError("task_ids must contain at least one task id — get them from list_tasks");
-      if (!STATUS_VALUES.includes(args.status)) throw new ToolError("status must be consider, todo or done");
+      const wanted = normalizeStatus(args.status);
+      if (!wanted || !STATUS_VALUES.includes(wanted)) throw new ToolError("status must be review, todo or done");
       const updated: any[] = [];
       for (const id of ids) {
-        const r = await patchTask(c, id, { status: args.status });
+        const r = await patchTask(c, id, { status: wanted as any });
         if (r.error) throw new ToolError(`task ${id}: ${r.error}`);
         updated.push({ id: r.task.id, title: r.task.title, status: r.task.status });
       }

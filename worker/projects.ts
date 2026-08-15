@@ -60,7 +60,7 @@ projectRoutes.get("/", async (c) => {
   const completed = c.req.query("completed") === "1";
   const { results } = await c.env.DB.prepare(
     `SELECT p.id, p.name, p.description, p.accent, p.icon, p.status, p.completed_at, p.created_at,
-       COUNT(CASE WHEN t.status = 'consider' AND t.parent_id IS NULL THEN 1 END) AS consider_count,
+       COUNT(CASE WHEN t.status = 'review' AND t.parent_id IS NULL THEN 1 END) AS review_count,
        COUNT(CASE WHEN t.status = 'todo' AND t.parent_id IS NULL THEN 1 END) AS todo_count,
        COUNT(CASE WHEN t.status = 'done' AND t.parent_id IS NULL THEN 1 END) AS done_count,
        MIN(CASE WHEN t.status != 'done' THEN t.due_date END) AS next_due,

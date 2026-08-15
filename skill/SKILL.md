@@ -10,15 +10,14 @@ to open Kanryo to keep it current.
 
 ## The three states
 
-- **"To review"** (status value on the wire: `consider`) - not committed; the
+- **"To review"**  - not committed; the
   user still wants to think it through, usually by talking it over with Claude.
   This column is his agenda of conversations to have, and most things he dumps
   himself start here.
 - **`todo`** - decided, waiting to be done.
 - **`done`** - finished.
 
-Say "review" when talking to the user; always send the literal string
-`"consider"` to the API. The lifecycle is review -> (a conversation with
+Say "review" when talking to the user; The lifecycle is review -> (a conversation with
 Claude) -> todo -> (the work happens) -> done.
 
 ## How to reach Kanryo
@@ -108,7 +107,7 @@ lazily as before.
 **Act without asking, then report** - these only touch tasks that already
 exist:
 
-- `set_task_status` - any move between `consider` (review), `todo` and `done`
+- `set_task_status` - any move between `review` (review), `todo` and `done`
 - `update_task` - title, notes, priority, due date/time
 - `file_inbox_item` - moving an inbox item onto a project (see Inbox triage)
 
@@ -130,7 +129,7 @@ approval.
 Before adding anything, call `list_tasks` and check for a near-duplicate. If
 one exists, sharpen it with `update_task` instead of creating a second.
 
-New tasks default to `consider` (review). Pass `"todo"` only for work actually
+New tasks default to `review` (review). Pass `"todo"` only for work actually
 decided on in this conversation. Only set a due_date if a real date was
 discussed - it creates a Google Calendar event, and marking the task done
 removes it again.
@@ -190,7 +189,7 @@ in doubt, leave it.
 **Never delete.** Discarding an inbox item stays a human decision in the app.
 Triage has no delete step.
 
-Filed items keep their `consider` status, so they land in the project's
+Filed items keep their `review` status, so they land in the project's
 "To review" column - correct for something that has never been discussed. Never
 invent a due date during triage.
 

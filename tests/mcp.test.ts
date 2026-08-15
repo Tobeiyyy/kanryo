@@ -51,7 +51,7 @@ describe("handleRpc", () => {
   });
   it("set_task_status accepts all three states in its schema", async () => {
     const tool = TOOL_DEFS.find((t) => t.name === "set_task_status")!;
-    expect((tool.inputSchema.properties as any).status.enum).toEqual(["consider", "todo", "done"]);
+    expect((tool.inputSchema.properties as any).status.enum).toEqual(["review", "todo", "done"]);
     expect(tool.inputSchema.required).toEqual(["task_ids", "status"]);
   });
   it("update_task takes only a task_id as required, edits are presence-based", () => {
