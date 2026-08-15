@@ -1,54 +1,58 @@
 # Kanryo
 
-A kanban board for one person. It runs on Cloudflare's free tier, installs on your
-phone as a PWA, and exposes an MCP endpoint so Claude can read and write the same
+A kanban board for one person, running on Cloudflare's free tier. It installs on
+your phone as a PWA and serves an MCP endpoint, so Claude reads and writes the same
 board you tap on. 完了 (*kanryo*) means "completed".
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
 ## Why
 
-Most task apps are built for teams and priced per seat. This one assumes a single
-user: one password, no accounts, no sharing, no sync service. It costs nothing to
-run and the data stays in your own Cloudflare account.
+I did not need a team tool. I needed somewhere to put ideas at 11pm without filling
+in five fields first, and I wanted Claude to still know about them next week.
 
-The reason I built it rather than using something off the shelf is the Claude part.
-The board is working memory that survives between chats, so a conversation can
-create a project from something we just designed, close a task when the work is
-actually done, or read notes I left two months ago.
+That second half is really why this exists. Chats forget. Claude Code forgets. I got
+tired of re-explaining the same project every time I opened a new conversation, so
+the board became the memory instead: a chat can look up what is still open, close
+something when we finish it, or read a note I wrote in June and have not thought
+about since.
 
 ## What it does
 
-Tasks live in three columns instead of the usual two: **to review**, **to do**,
-**done**. New tasks start in "to review", which means "not committed to yet". In
-practice that column became a list of things to talk through with Claude before
-they turn into real work, which keeps the to-do column honest.
+Tasks sit in three columns: to review, to do, done. New ones land in "to review",
+which is my way of saying I have not committed to it yet. That column turned into a
+list of things I want to talk through with Claude, and the to-do column stayed
+believable as a result.
 
 ![Project board](docs/screenshots/project-board.png)
 
-Other things it does:
+Capture is one box at the top of the dashboard. Type the thought, press enter, about
+five seconds on a phone. No project, no priority, nothing to fill in. Whatever you
+type is mirrored to localStorage as you type it and kept with a retry if the request
+fails, because losing an idea to a tunnel once was enough.
 
-* A quick-add bar on the dashboard dumps a raw thought with no project and no
-  fields, so capture takes about five seconds on a phone. What you type is copied
-  to localStorage on every keystroke and kept with a visible retry if the request
-  fails, so an idea can't vanish because the train went into a tunnel.
-* Projects hold a description, tags, and links: a repo, a live URL, a folder path,
-  a Claude chat. Tags group related projects and can filter the dashboard.
-* Tasks take priorities, labels, subtasks, due dates and attachments. Photos and
-  files go to R2, and images are downscaled in the browser before upload.
-* A task with a due date becomes an event on a Google Calendar you dedicate to it.
-  Completing the task removes the event. Reminders come from Google's own settings,
-  so the app has no notification system of its own.
-* Finished projects collapse into a drawer instead of cluttering the dashboard.
-  Projects with nothing left to do fade out on their own.
+Projects carry a description, tags, and links, which can be a repo, a live URL, a
+Windows folder path or a Claude chat. Tags also filter the dashboard.
+
+Tasks have the usual priorities, labels, subtasks and due dates. You can attach
+photos and files, which go to R2; images get downscaled in the browser first, since
+a 6MB phone photo helps nobody. Claude can look at those attachments, which is
+oddly handy for screenshots of your own bugs.
+
+Give a task a due date and it shows up as an event on a Google Calendar you set
+aside for it. Finish the task and the event disappears. All the reminding is
+Google's job.
+
+Finished projects fold into a drawer at the bottom. Projects with nothing open left
+just fade out where they are.
 
 ![Task detail](docs/screenshots/task-detail.png)
 
 ## Stack
 
-React 18, Vite, TypeScript, Hono on Cloudflare Workers, D1 for data, R2 for files,
-plain CSS with design tokens. No UI framework, no ORM, no state library beyond
-TanStack Query. At personal volumes everything fits in the free tier.
+React 18, Vite, TypeScript, Hono on Cloudflare Workers, D1, R2, and plain CSS with
+design tokens. TanStack Query is the only real dependency in the frontend. At one
+person's volume it all sits inside the free tier.
 
 ## Setup
 
@@ -83,8 +87,8 @@ npx wrangler secret put AUTH_SECRET     # any long random string
 npx wrangler secret put KANRYO_TOKEN    # long random hex, used by Claude below
 ```
 
-On Windows PowerShell, piping a string into `wrangler secret put` appends a newline
-and quietly corrupts the value. Use `npx wrangler secret bulk secrets.json` there.
+Windows note: piping a string into `wrangler secret put` in PowerShell appends a
+newline and quietly corrupts the value. Use `npx wrangler secret bulk secrets.json`.
 
 Deploy:
 
@@ -97,11 +101,11 @@ use Share, then "Add to Home Screen".
 
 ## Google Calendar (optional)
 
-Kanryo writes to one calendar you set aside for it, using a service account, so
-there is no OAuth flow and no refresh tokens to store.
+Kanryo writes to one calendar you set aside for it through a service account, so
+there is no OAuth flow and nothing to refresh.
 
-1. In Google Cloud, pick or create a project, enable the Google Calendar API,
-   create a service account and download a JSON key. It needs no IAM roles.
+1. In Google Cloud, pick or create a project, enable the Google Calendar API, create
+   a service account and download a JSON key. It needs no IAM roles.
 2. Set two secrets from that file:
    ```bash
    npx wrangler secret put GCAL_CLIENT_EMAIL   # client_email
@@ -111,14 +115,13 @@ there is no OAuth flow and no refresh tokens to store.
    email address, giving it "Make changes to events".
 4. Paste that calendar's ID into Kanryo's settings page.
 
-A due date now shows up on that calendar within seconds. With a time it becomes a
-30 minute event, without one it is all day. Completing or deleting the task removes
-it again.
+Due dates then appear on that calendar within seconds. With a time it becomes a 30
+minute event, otherwise it is all day.
 
 ## Using it with Claude
 
-The worker serves MCP at `/mcp/<KANRYO_TOKEN>` with tools for listing, creating and
-updating projects and tasks, filing inbox items, tagging, and viewing attachments.
+The worker serves MCP at `/mcp/<KANRYO_TOKEN>`, with tools for reading and writing
+projects and tasks, filing inbox items, tagging, and viewing attachments.
 
 In claude.ai, go to Settings, then Connectors, and add a custom connector pointing
 at:
@@ -127,35 +130,38 @@ at:
 https://<your-worker>.workers.dev/mcp/<KANRYO_TOKEN>
 ```
 
-The token in the path is what authenticates the call, so treat that whole URL like
-a password.
+The token sits in the path and is what authenticates the call, so treat the whole
+URL like a password.
 
-Tools alone are not enough. [`skill/SKILL.md`](skill/SKILL.md) is the skill that
-tells Claude how to behave: close a task the moment you say you finished it, but ask
-before creating or deleting anything, and read a project in brief mode before
-pulling whole notes into the conversation. Replace the placeholder URL inside it,
-zip the file in a folder called `kanryo`, and upload it under Settings, Capabilities,
-Skills. Claude Code picks it up from `~/.claude/skills/kanryo/` instead.
+Then there is [`skill/SKILL.md`](skill/SKILL.md), which matters more than the tools
+did. It tells Claude to close a task the moment you say you finished it, and to ask
+first before creating or deleting anything. My first version asked permission for
+every single write and I stopped using it within a day. Replace the placeholder URL
+inside, zip it in a folder called `kanryo`, and upload it under Settings,
+Capabilities, Skills. Claude Code reads it from `~/.claude/skills/kanryo/` instead.
 
-Then a chat can handle things like "what is on my review list for the recipe app"
-or "we finished the offline mode, mark it done".
+After that a chat can handle "what is on my review list for the recipe app" or "we
+finished the offline mode, mark it done".
 
 ![Completed projects](docs/screenshots/completed-projects.png)
 
-## Some decisions, in case they look like gaps
+## Decisions that might look like gaps
 
-Single user is structural, not an oversight. One shared password, one bearer token.
-Accounts would mean a user table, sessions and per-row ownership for no benefit here.
+There is one password and one bearer token, and that is the whole auth model. Adding
+accounts would drag in a user table, sessions and per-row ownership to serve exactly
+one person.
 
-There are no recurring tasks. A habit belongs in a habit tracker, not a project
-board. There are also no push notifications, because Google Calendar already does
-reminders well.
+Recurring tasks are missing on purpose. I tried them, hated the noise, and moved
+habits somewhere else.
 
-Calendar sync writes its failure state first. Any change that affects an event marks
-the task dirty in the same database write, then converges in the background. If the
-worker dies mid-sync the flag is still set and the next app load retries it. Deleted
-tasks leave a tombstone so their event can still be removed afterwards.
+Push notifications are missing for a duller reason: Google Calendar already sends
+them, and I did not want to build a second thing that pings my phone.
 
+Calendar sync writes its failure state before it tries anything. A change that
+affects an event marks the task dirty in the same database write, then converges in
+the background. If the worker dies halfway the flag survives and the next app load
+picks it up again. Deleted tasks leave a tombstone behind so their event can still
+be cleaned up.
 
 ## Development
 
@@ -165,8 +171,8 @@ npm test           # vitest
 npm run check      # typecheck
 ```
 
-The dev server uses a local database, so you can seed whatever you like without
-touching your real board.
+The dev server uses a local database, so seed it with whatever nonsense you like
+without touching the real board.
 
 ## License
 
