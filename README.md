@@ -3,7 +3,9 @@
 If you combine a kanban board, a notes inbox and Claude's memory you would probably
 get something like Kanryo. It is a project board for exactly one person, it runs on
 Cloudflare's free tier, and it serves an MCP endpoint so every Claude surface reads
-and writes the same board I tap on my phone. 完了 (*kanryo*) means "completed".
+and writes the same board I tap on my phone.
+
+完了 (*kanryo*) means "completed".
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
