@@ -12,43 +12,51 @@ and writes the same board I tap on my phone. 完了 (*kanryo*) means "completed"
 I did not need a team tool. I needed a place to throw ideas at 11pm without filling
 in five fields first, and I wanted Claude to still know about them next week.
 
-That second part is the real reason this exists. Chats forget. Claude Code forgets.
-I got really tired of re-explaining my own projects to a model that helped me build
-them, so the board became the memory instead. A chat can look up what is still open,
+Chats forget. Claude Code forgets. I got really tired of re-explaining my own projects to a model that helped me build
+them, so the board became an overarching memory instead. A chat can look up what is still open,
 close a task when we finish something, or read a note I wrote in June and completely
-forgot about. Is that overkill for a to-do list? Probably. It also works.
+forgot about. Similarly Cowork can obviously also look this up.
 
 ## What it does
 
 Tasks sit in three columns: to review, to do, done. New ones land in "to review",
 which is my way of saying I have not committed to this yet. That column turned into
-a list of things I want to talk through with Claude first, and honestly, that one
-rule is what keeps the to-do column believable.
+a list of things I want to talk through with Claude first, this way I am not afraid 
+to add lots of new ideas, because half of mine are probably not doable and claude 
+will tell me immediately if it is something already made, something doable, or something
+that is not possible.
 
 ![Project board](docs/screenshots/project-board.png)
 
-Capture is one box at the top of the dashboard. Type the thought, press enter,
-about five seconds on a phone. No project, no priority, nothing to fill in. It
-lands in an inbox and gets sorted later, by me in one tap or by Claude when I ask
-it to triage. Whatever you type is mirrored to localStorage on every keystroke and
-kept with a visible retry if the request fails. I lost exactly one idea to a train
-tunnel and never again.
+Capture is one box at the top of the dashboard. Type the thought, hit send, thats it
+It's made with as little friction as possible so you are able to capture your ideas
+as soon as they happen and can instantly rest assured they are there whenever you 
+want to discuss them deeper. No confirm button. It lands in an inbox and gets sorted 
+later, by me in one tap or by Claude when I ask it to triage. You can even set up a 
+scheduled task for this weekly or so.
+
+Whatever you type is mirrored to localStorage on every keystroke and
+kept with a visible retry if the request fails.
 
 Projects hold a description, tags and links: a repo, a live URL, a folder path on
 your machine, a Claude chat. Tags group related projects and filter the dashboard.
 
 Tasks have priorities, labels, subtasks, due dates and attachments. Photos and
 files go to R2, images get downscaled in the browser first cause a 6MB phone photo
-helps nobody. Claude can actually look at the attachments, which sounds like a
-gimmick and really isn't. I screenshot a bug on my phone, attach it, and a chat two
-days later can see exactly what I saw.
+helps nobody. Claude can actually look at the attachments. I screenshot a bug on
+my phone, attach it, and a chat two days later can see exactly what I saw.
+
+Speaking of phone - bookmark the URL of your Kanryo as a PWA on your home screen, 
+synced and able to store your ideas wherever you are. Plus it looks as clean as it 
+does on desktop aswell!
 
 Give a task a due date and it appears as an event on a Google Calendar you set
 aside for it. Finish the task, the event disappears. All the reminding is Google's
 job, so this app sends no notifications at all.
 
 Finished projects fold into a drawer at the bottom of the dashboard. Projects with
-nothing open left just fade out where they stand.
+nothing open left just fade out where they stand, useful for projects you know you will
+have no feature ideas about.
 
 ![Task detail](docs/screenshots/task-detail.png)
 
