@@ -44,13 +44,31 @@ export default function Attachments({ taskId }: { taskId: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId]);
 
+  // Paste-to-attach: while the task sheet is open, Ctrl+V with a file or screenshot in the
+  // clipboard uploads it. Text pastes into inputs are untouched (no files on the event).
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const files = e.clipboardData?.files;
+      if (!files || files.length === 0) return;
+      e.preventDefault();
+      void upload(files);
+    }
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]);
+
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     setBusy(true);
     setError(null);
     try {
       for (const file of Array.from(files)) {
-        const { blob, name, type } = await prepare(file);
+        // Clipboard files all arrive as "image.png"; stamp them so they stay distinguishable.
+        const named = file.name === "image.png" || file.name === "image.jpg"
+          ? new File([file], `paste-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.${file.name.split(".").pop()}`, { type: file.type })
+          : file;
+        const { blob, name, type } = await prepare(named);
         const res = await fetch(`/api/tasks/${taskId}/attachments`, {
           method: "POST",
           headers: { "content-type": type, "x-filename": encodeURIComponent(name) },
