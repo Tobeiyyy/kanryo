@@ -188,4 +188,5 @@ exactly that annoyance.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). If Kanryo ends up being useful to you, there's a
+[Ko-fi](https://ko-fi.com/tobeiyyy).
