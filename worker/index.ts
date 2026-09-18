@@ -5,6 +5,7 @@ import { taskRoutes, inboxRoutes } from "./tasks";
 import { gcalRoutes } from "./gcalRoutes";
 import { mcpRoutes } from "./mcp";
 import { attachmentRoutes } from "./attachments";
+import { habitDashRoutes } from "./habitDash";
 
 export type Env = {
   DB: D1Database;
@@ -70,5 +71,9 @@ app.route("/api/tasks", taskRoutes);
 app.route("/api/inbox", inboxRoutes);
 app.route("/api/gcal", gcalRoutes);
 app.route("/mcp", mcpRoutes);
+// OAuth discovery probes must 404, or the SPA fallback's 200 makes claude.ai
+// believe there is an OAuth server here and connector registration fails.
+app.all("/.well-known/*", (c) => c.text("not found", 404));
+app.route("/habits", habitDashRoutes);
 
 export default app;
