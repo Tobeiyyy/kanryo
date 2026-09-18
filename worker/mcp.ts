@@ -301,7 +301,7 @@ async function addTasksTo(c: Ctx, projectId: number, tasks: unknown): Promise<an
   const out: any[] = [];
   for (const t of tasks) {
     const r = await createTask(c, {
-      title: t?.title, project_id: projectId, status: t?.status,
+      title: t?.title, project_id: projectId, status: t?.status, parent_id: t?.parent_id,
       priority: t?.priority, due_date: t?.due_date, due_time: t?.due_time, notes: t?.notes,
     });
     if (r.error) throw new ToolError(`task ${JSON.stringify(t?.title ?? null)}: ${r.error}`);
