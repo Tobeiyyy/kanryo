@@ -26,6 +26,7 @@ const TASK_ITEM_SCHEMA = {
     priority: { type: "integer", minimum: 0, maximum: 3 },
     due_date: { type: "string", description: "YYYY-MM-DD — the day the user wants this on their calendar" },
     due_time: { type: "string", description: "HH:MM, only with due_date" },
+    parent_id: { type: "integer", description: "Makes this a subtask of an existing top-level task (id from list_tasks). One level only - a subtask cannot have subtasks of its own." },
     notes: { type: "string" },
   },
   required: ["title"],
