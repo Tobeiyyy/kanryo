@@ -139,7 +139,35 @@ removes it again.
 detail goes below it. When updating an existing note, rewrite that first line
 to match the new state - never let it go stale while details pile up
 underneath. This is what lets a later session orient from title + first line
-without reading whole notes.
+without reading whole notes. The rest of the note follows these rules:
+
+- **Exact numbers and names, never adjectives.** "47/51 pass, fail: pa-27,
+  pa-45", "commit 6b7e291", "3 of 8 items" - not "most pass", "nearly done",
+  "a few left". A count you do not have is written as "count not stated",
+  not estimated.
+- **Provenance on every decision.** A carried-forward choice is tagged
+  `decided` only when the user chose it in a message of his own; `agreed`
+  when he said yes to a proposal; `proposed` when it was suggested and he never
+  accepted it. A summary never promotes a tag. A note that reads "decided"
+  with no user turn behind it is downgraded and states so.
+- **Committed vs uncommitted.** Work in a repo names the commit id or branch;
+  uncommitted or unpushed work is called that.
+- **Open items are classified.** Each remaining item is `Blocked` (on what),
+  `Ready` (can start without re-investigation) or `Needs investigation`
+  (what was already tried and ruled out, so the next session does not repeat
+  it).
+- **Fidelity pass before compressing.** Before shortening or rewriting a
+  note, list every condition ("works if"), exception ("except when"),
+  uncertainty, near-alternative and dependency in it that must survive,
+  then verify the new text against that list; a dropped item is restored
+  inline ("done (assuming X)"), never by making the note longer.
+- **Ledger discipline.** A note is planning, not history: durable facts are
+  updated in place, never appended as a second version; only the last 3
+  Stand states stay in the note (newest first, one line each, dated); older
+  states are dropped from the note - they live in git, `decisions.md` or the
+  vault's `evals/runs-log.md`, and are not re-read. Hard cap 40 lines per
+  note; a note that must exceed it is two tasks. (Two-ledger rule: Kanryo and `PLAN.md` are
+  rewritten freely; `decisions.md`, the runs log and git are append-only.)
 
 ## Step 3 - report
 
