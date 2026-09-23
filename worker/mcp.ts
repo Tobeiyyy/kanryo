@@ -6,6 +6,7 @@ import { createTask, deleteTask, patchTask, toBriefTask } from "./tasks";
 import { normalizeStatus } from "./taskLogic";
 import { ACCENTS, KINDS, attachLabels, attachTags, setProjectTags } from "./projects";
 import { listAttachments } from "./attachments";
+import { extractJpegPages, hasRealText } from "./pdfImages";
 
 export type RpcMessage = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
 
@@ -62,10 +63,13 @@ export const TOOL_DEFS = [
   },
   {
     name: "view_attachment",
-    description: "Fetch one attachment by id and return it for use. Images come back as an image you can actually see and reason about (a screenshot of a bug, a photo of a whiteboard, a receipt). Text files come back as text. Office documents and other binaries (xlsx, docx, pdf, zip) come back as base64 with instructions — decode them to a real file and open them with the matching tool rather than reading the base64. Files over 256 KB return a download instruction instead. Get attachment ids from list_task_attachments.",
+    description: "Fetch one attachment by id and return it for use. Images come back as an image you can actually see and reason about (a screenshot of a bug, a photo of a whiteboard, a receipt). Text files come back as text. Documents (pdf, docx, xlsx, odt, ods, numbers) are converted to Markdown text on the server, at any size; long documents come back in parts — the reply says 'part N of M', call again with part: N+1 to read on. Only other binaries (zip, scanned PDFs with no text layer, ...) come back as base64 or a download instruction. Get attachment ids from list_task_attachments.",
     inputSchema: {
       type: "object",
-      properties: { attachment_id: { type: "integer" } },
+      properties: {
+        attachment_id: { type: "integer" },
+        part: { type: "integer", minimum: 1, description: "Which part of a long converted document to return, starting at 1. Omit for the first part." },
+      },
       required: ["attachment_id"],
     },
   },
@@ -279,6 +283,24 @@ export function isTextual(contentType: string, filename: string): boolean {
   return false;
 }
 
+/** Formats Workers AI's toMarkdown converts without an AI model (images are left out on purpose: those cost neurons). */
+export function isConvertibleDocument(contentType: string, filename: string): boolean {
+  return /\.(pdf|docx|xlsx|xlsm|xlsb|xls|et|odt|ods|numbers)$/i.test(filename)
+    || contentType.toLowerCase().split(";")[0].trim() === "application/pdf";
+}
+
+/** Characters per part: large enough that a typical exam PDF fits in one or two calls. */
+export const PART_CHARS = 40_000;
+
+/** A scanned page is ~250 KB of JPEG; two per call keeps a tool result well under a MB. */
+const SCAN_PAGES_PER_PART = 2;
+
+export function pageText(text: string, part: number, size = PART_CHARS): { body: string; part: number; parts: number } {
+  const parts = Math.max(1, Math.ceil(text.length / size));
+  const p = Math.min(Math.max(1, Math.floor(part) || 1), parts);
+  return { body: text.slice((p - 1) * size, p * size), part: p, parts };
+}
+
 /** Chunked base64 so a multi-MB photo doesn't blow the argument limit of String.fromCharCode. */
 function base64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
@@ -357,8 +379,47 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
           __mcp_content: [{ type: "text", text: `${row.filename}:\n\n${new TextDecoder().decode(buf).slice(0, 20000)}` }],
         };
       }
-      // Binary (xlsx, docx, pdf, zip, ...). Hand back base64 so the caller can reconstruct the
-      // real file and open it with a proper reader, instead of decoding ZIP bytes as text.
+      // Documents become Markdown server-side, so a chat reads a 5 MB PDF as text instead of
+      // needing base64 it can't receive. Empty output (a scanned PDF) falls through to base64.
+      if (isConvertibleDocument(row.content_type, row.filename)) {
+        const [converted] = await c.env.AI.toMarkdown([
+          { name: row.filename, blob: new Blob([buf], { type: row.content_type }) },
+        ]);
+        const text = converted?.format === "markdown" || converted?.format === "text" ? converted.data.trim() : "";
+        const isPdf = /\.pdf$/i.test(row.filename) || row.content_type === "application/pdf";
+        if (isPdf && !hasRealText(text)) {
+          const pages = await extractJpegPages(buf);
+          if (pages.length > 0) {
+            const parts = Math.ceil(pages.length / SCAN_PAGES_PER_PART);
+            const part = Math.min(Math.max(1, Math.floor(Number(args.part)) || 1), parts);
+            const first = (part - 1) * SCAN_PAGES_PER_PART;
+            const shown = pages.slice(first, first + SCAN_PAGES_PER_PART);
+            const more = part < parts ? ` Call view_attachment again with part: ${part + 1} for the next pages.` : "";
+            return {
+              __mcp_content: [
+                {
+                  type: "text",
+                  text: `${row.filename} is a scanned PDF with no text layer, so its pages come back as images — `
+                    + `pages ${first + 1}–${first + shown.length} of ${pages.length} (part ${part} of ${parts}).${more}`,
+                },
+                ...shown.map((p) => ({ type: "image", data: base64(p.slice().buffer), mimeType: "image/jpeg" })),
+              ],
+            };
+          }
+        }
+        if (hasRealText(text)) {
+          const { body, part, parts } = pageText(text, typeof args.part === "number" ? args.part : 1);
+          const more = part < parts ? `\n\n[part ${part} of ${parts} — call view_attachment again with part: ${part + 1} to continue]` : "";
+          return {
+            __mcp_content: [{
+              type: "text",
+              text: `${row.filename} (${row.content_type}, ${row.size} bytes), converted to Markdown — part ${part} of ${parts}:\n\n${body}${more}`,
+            }],
+          };
+        }
+      }
+      // Remaining binaries (zip, scanned PDFs, ...). Hand back base64 so the caller can
+      // reconstruct the real file and open it with a proper reader.
       const origin = new URL(c.req.url).origin;
       if (buf.byteLength <= MAX_INLINE_BYTES) {
         return {

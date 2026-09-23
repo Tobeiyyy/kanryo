@@ -16,6 +16,7 @@
   "r2_buckets": [
     { "binding": "BUCKET", "bucket_name": "kanryo-files" }
   ],
+  "ai": { "binding": "AI" },
   "observability": { "enabled": true }
 }
 

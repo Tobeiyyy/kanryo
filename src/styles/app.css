@@ -150,7 +150,7 @@
 .seg { display: flex; gap: 0; margin: 12px 0; border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden; }
 .seg button { flex: 1; padding: 8px 0; border: none; background: var(--surface); color: var(--tx3); cursor: pointer; font-size: 14px; }
 .seg button.on { background: var(--accent); color: #fff; }
-.board { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: start; }
+.board { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: stretch; }
 .column { padding: 10px; background: var(--elev); border-radius: var(--r-md); border: 1px solid var(--line); min-height: 120px; }
 .column h4 { margin: 2px 4px 10px; font-size: 13px; color: var(--tx3); text-transform: uppercase; letter-spacing: 0.5px; }
 .column.drop { outline: 2px dashed var(--accent); outline-offset: -2px; }

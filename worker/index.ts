@@ -15,6 +15,7 @@ export type Env = {
   GCAL_PRIVATE_KEY: string;
   KANRYO_TOKEN: string;
   BUCKET: R2Bucket;
+  AI: Ai;
 };
 
 export type App = Hono<{ Bindings: Env }>;
