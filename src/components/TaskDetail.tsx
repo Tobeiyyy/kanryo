@@ -23,8 +23,12 @@ export default function TaskDetail({ task, subtasks, onClose }: {
 
   function autoGrow(el: HTMLTextAreaElement | null) {
     if (!el) return;
+    // Collapsing to "auto" to measure shortens the sheet and would snap its scroll to the top.
+    const sheet = el.closest(".sheet");
+    const top = sheet?.scrollTop ?? 0;
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+    if (sheet) sheet.scrollTop = top;
   }
 
   useEffect(() => {
@@ -35,6 +39,8 @@ export default function TaskDetail({ task, subtasks, onClose }: {
   }, [task.id]);
 
   useEffect(() => autoGrow(titleRef.current), [title]);
+  // Notes are often long "Stand:" write-ups; show them whole and let the sheet scroll.
+  useEffect(() => autoGrow(notesRef.current), [notes, showNotes]);
 
   const save = (fields: TaskPatchBody) => patch.mutate({ id: task.id, patch: fields });
 
@@ -121,7 +127,7 @@ export default function TaskDetail({ task, subtasks, onClose }: {
         {showNotes ? (
           <>
             <label style={{ fontSize: 12, color: "var(--tx3)" }}>Notes</label>
-            <textarea ref={notesRef} className="input" rows={3} value={notes}
+            <textarea ref={notesRef} className="input notes-input" rows={3} value={notes}
               onChange={(e) => setNotes(e.target.value)}
               onBlur={() => (notes || null) !== task.notes && save({ notes: notes || null })} />
           </>
