@@ -1,0 +1,124 @@
+/* Kanryo Pulse — ported from the claude.ai artifact with its own design kept intact.
+   Everything is scoped under .pulse; dark mode follows the app's data-theme toggle. */
+.pulse {
+  --pl-paper: #F7F8F6; --pl-card: #FFFFFF; --pl-ink: #141A17; --pl-ink-2: #4A5852; --pl-ink-3: #7C8B85;
+  --pl-rule: #DFE4E0; --pl-rule-soft: #ECEFEC;
+  --pl-review: #C2700F; --pl-todo: #2C6EA8; --pl-done: #2E8049; --pl-review-wash: #F5E7D6;
+  --pl-shadow: 0 1px 2px rgba(20, 26, 23, .05);
+  --pl-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --pl-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pl-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  max-width: 940px; margin: -16px auto 0; padding: 32px 20px 56px;
+  background: var(--pl-paper); color: var(--pl-ink);
+  font-family: var(--pl-sans); font-size: 15px; line-height: 1.5;
+  border-radius: var(--r-md);
+}
+:root[data-theme="dark"] .pulse {
+  --pl-paper: #111714; --pl-card: #18201B; --pl-ink: #E7EDE9; --pl-ink-2: #A6B4AE; --pl-ink-3: #7E8D87;
+  --pl-rule: #26322B; --pl-rule-soft: #1E2822;
+  --pl-review: #BF7E2A; --pl-todo: #5B96D4; --pl-done: #4E9855; --pl-review-wash: #2A2117;
+  --pl-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+.pulse * { box-sizing: border-box; }
+
+.pulse header { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 20px; margin-bottom: 26px; }
+.pulse h1 {
+  font-family: var(--pl-serif); font-size: clamp(34px, 6vw, 48px); font-weight: 400;
+  line-height: 1; letter-spacing: -.01em; margin: 0; text-wrap: balance;
+}
+.pulse .sub { color: var(--pl-ink-2); font-size: 14px; margin: 0; max-width: 52ch; }
+
+.pulse .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }
+.pulse .tile {
+  background: var(--pl-card); border: 1px solid var(--pl-rule); border-radius: 3px;
+  padding: 14px 16px 13px; box-shadow: var(--pl-shadow); position: relative; overflow: hidden;
+}
+.pulse .tile::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--seg); }
+.pulse .tile.lead { background: var(--pl-review-wash); border-color: var(--pl-review); }
+.pulse .tile .k {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--pl-ink-2); margin-bottom: 5px; display: block; font-weight: 500;
+}
+.pulse .tile .v {
+  font-family: var(--pl-mono); font-size: 30px; font-weight: 500; line-height: 1;
+  font-variant-numeric: tabular-nums; display: block;
+}
+.pulse .tile .n { font-size: 12px; color: var(--pl-ink-2); margin-top: 6px; display: block; line-height: 1.35; }
+.pulse .caption { font-size: 12.5px; color: var(--pl-ink-2); margin: 0 0 26px; max-width: 60ch; }
+
+.pulse .controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid var(--pl-rule);
+}
+.pulse .controls label { font-size: 12px; color: var(--pl-ink-2); letter-spacing: .01em; }
+.pulse select, .pulse button.tgl {
+  font-family: var(--pl-sans); font-size: 12.5px; color: var(--pl-ink);
+  background: var(--pl-card); border: 1px solid var(--pl-rule); border-radius: 3px;
+  padding: 5px 8px; cursor: pointer;
+}
+.pulse button.tgl[aria-pressed="true"] { background: var(--pl-ink); color: var(--pl-paper); border-color: var(--pl-ink); }
+.pulse .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-left: auto; }
+.pulse .chip {
+  font-family: var(--pl-mono); font-size: 11px; letter-spacing: .02em;
+  background: transparent; color: var(--pl-ink-2);
+  border: 1px solid var(--pl-rule); border-radius: 999px; padding: 3px 9px; cursor: pointer;
+}
+.pulse .chip[aria-pressed="true"] { background: var(--pl-ink); color: var(--pl-paper); border-color: var(--pl-ink); }
+.pulse :focus-visible { outline: 2px solid var(--pl-todo); outline-offset: 2px; }
+
+.pulse .legend { display: flex; flex-wrap: wrap; gap: 16px; padding: 12px 0 6px; font-size: 12px; color: var(--pl-ink-2); }
+.pulse .legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pulse .sw { width: 11px; height: 11px; border-radius: 2px; flex: none; }
+
+.pulse .rows { display: flex; flex-direction: column; }
+.pulse .row {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, 34%) auto;
+  align-items: center; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--pl-rule-soft);
+}
+.pulse .row:last-child { border-bottom: none; }
+.pulse .name { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.pulse .name .t { font-weight: 500; font-size: 14px; overflow-wrap: anywhere; }
+.pulse .name .ic { font-size: 13px; flex: none; line-height: 1; }
+.pulse .tags { font-family: var(--pl-mono); font-size: 10.5px; color: var(--pl-ink-3); letter-spacing: .02em; margin-top: 2px; }
+.pulse .track { height: 11px; background: var(--pl-rule-soft); border-radius: 2px; display: flex; overflow: hidden; }
+.pulse .bar { display: flex; height: 100%; border-radius: 2px; overflow: hidden; gap: 2px; min-width: 3px; }
+.pulse .pl-seg { height: 100%; min-width: 3px; }
+.pulse .pl-seg:first-child { border-radius: 2px 0 0 2px; }
+.pulse .pl-seg:last-child { border-radius: 0 2px 2px 0; }
+.pulse .pl-seg:only-child { border-radius: 2px; }
+.pulse .counts {
+  font-family: var(--pl-mono); font-size: 12px; font-variant-numeric: tabular-nums;
+  display: flex; gap: 9px; white-space: nowrap;
+}
+.pulse .counts i { font-style: normal; }
+.pulse .c-r { color: var(--pl-review); }
+.pulse .c-t { color: var(--pl-todo); }
+.pulse .c-d { color: var(--pl-done); }
+.pulse .c-0 { color: var(--pl-ink-3); opacity: .45; }
+
+.pulse .tablewrap { overflow-x: auto; margin-top: 8px; }
+.pulse table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.pulse th, .pulse td { text-align: left; padding: 7px 12px 7px 0; border-bottom: 1px solid var(--pl-rule-soft); }
+.pulse th { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--pl-ink-2); font-weight: 500; }
+.pulse td.num { font-family: var(--pl-mono); font-variant-numeric: tabular-nums; text-align: right; padding-right: 16px; }
+
+.pulse .skel { height: 11px; border-radius: 2px; background: var(--pl-rule-soft); }
+@keyframes pulse-fade { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.pulse .loading .skel { animation: pulse-fade 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .pulse .loading .skel { animation: none; } }
+
+.pulse-tip {
+  position: fixed; z-index: 50; pointer-events: none;
+  background: var(--pl-ink); color: var(--pl-paper);
+  font-family: var(--pl-mono); font-size: 11.5px; letter-spacing: .01em;
+  padding: 5px 9px; border-radius: 3px; white-space: nowrap;
+}
+
+@media (max-width: 620px) {
+  .pulse { padding: 24px 16px 40px; }
+  .pulse .tiles { grid-template-columns: 1fr; gap: 8px; }
+  .pulse .tile .v { font-size: 26px; }
+  .pulse .row { grid-template-columns: minmax(0, 1fr); gap: 7px; padding: 13px 0; }
+  .pulse .chips { margin-left: 0; width: 100%; }
+}

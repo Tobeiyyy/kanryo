@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Inbox from "./pages/Inbox";
 import Project from "./pages/Project";
 import Settings from "./pages/Settings";
+import Pulse from "./pages/Pulse";
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
@@ -39,6 +40,7 @@ function Layout() {
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/project/:id" element={<Project />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/pulse" element={<Pulse />} />
         </Routes>
       </main>
     </>

@@ -19,6 +19,7 @@ export default function Nav() {
           {...(isIOS ? {} : { target: "_blank", rel: "noreferrer" })}
           title="Google Calendar"
         >📅</a>
+        <NavLink to="/pulse">Pulse</NavLink>
         <NavLink to="/settings">Settings</NavLink>
       </div>
     </nav>

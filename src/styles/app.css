@@ -228,3 +228,8 @@ button.link-chip { cursor: pointer; font-size: 13px; }
   .nav { position: fixed; top: auto; bottom: 0; width: 100%; border-top: 1px solid var(--line); border-bottom: none; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
   .board { grid-template-columns: 1fr; }
 }
+/* Five nav entries plus the brand only fit a 375px phone with tighter links. */
+@media (max-width: 480px) {
+  .nav-links { gap: 0; }
+  .nav-links a { padding: 6px 8px; }
+}
