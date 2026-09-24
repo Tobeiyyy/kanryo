@@ -22,7 +22,7 @@ describe("handleRpc", () => {
     const res: any = await handleRpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, call);
     expect(res.result.tools.map((t: any) => t.name).sort()).toEqual(
       ["add_inbox_item", "add_links", "add_tasks", "create_project", "delete_tasks",
-       "file_inbox_item", "get_task", "list_inbox", "list_projects",
+       "file_inbox_item", "get_task", "list_inbox", "list_project_files", "list_projects",
        "list_task_attachments", "list_tasks", "set_project_completed",
        "set_project_tags", "set_task_status", "update_task", "view_attachment"]);
     for (const t of res.result.tools) {

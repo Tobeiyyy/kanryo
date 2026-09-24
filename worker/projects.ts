@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "./index";
 import { queueOrphanFlush } from "./gcal";
-import { purgeTaskFiles } from "./attachments";
+import { purgeProjectFiles, purgeTaskFiles } from "./attachments";
 import { toBriefTask } from "./tasks";
 
 type HonoEnv = { Bindings: Env };
@@ -147,6 +147,7 @@ projectRoutes.delete("/:id", async (c) => {
     "SELECT id FROM tasks WHERE project_id = ?",
   ).bind(id).all<{ id: number }>();
   await purgeTaskFiles(c, projectTasks.map((t) => t.id));
+  await purgeProjectFiles(c, id);
   // Same-batch tombstones (spec: failure state written first): capture every event id this
   // cascade will destroy, then delete. flushOrphans reconciles the calendar afterwards.
   await c.env.DB.batch([

@@ -143,6 +143,8 @@
   padding: 4px 10px; border: 1px solid var(--border); border-radius: 99px;
   color: var(--tx2); text-decoration: none; background: var(--surface);
 }
+.proj-files { margin-top: 8px; }
+.proj-files .completed-toggle { margin-bottom: 4px; font-size: 13px; color: var(--tx3); }
 .filter-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
 .chip {
   font-size: 12px; padding: 3px 10px; border-radius: 99px; cursor: pointer;

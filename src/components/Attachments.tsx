@@ -28,35 +28,44 @@ async function prepare(file: File): Promise<{ blob: Blob; name: string; type: st
   }
 }
 
-export default function Attachments({ taskId }: { taskId: number }) {
-  const [items, setItems] = useState<Attachment[]>([]);
+type FileItem = Pick<Attachment, "id" | "filename" | "content_type">;
+
+/** Files on one task (inside the task sheet) or on a whole project (on the project page). */
+export default function Attachments({ taskId, projectId }: { taskId?: number; projectId?: number }) {
+  const isProject = projectId !== undefined;
+  const listUrl = isProject ? `/api/projects/${projectId}/files` : `/api/tasks/${taskId}/attachments`;
+  const fileUrl = (id: number) => (isProject ? `/api/project-files/${id}` : `/api/attachments/${id}`);
+  const [items, setItems] = useState<FileItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
 
   async function load() {
-    setItems(await api<Attachment[]>(`/api/tasks/${taskId}/attachments`));
+    setItems(await api<FileItem[]>(listUrl));
   }
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId]);
+  }, [listUrl]);
 
-  // Paste-to-attach: while the task sheet is open, Ctrl+V with a file or screenshot in the
-  // clipboard uploads it. Text pastes into inputs are untouched (no files on the event).
+  // Paste-to-attach: Ctrl+V with a file or screenshot in the clipboard uploads it. Text pastes
+  // into inputs are untouched (no files on the event). The project page steps aside while a
+  // task sheet is open, so a paste there lands on the task, not on the project too.
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
       const files = e.clipboardData?.files;
       if (!files || files.length === 0) return;
+      if (isProject && document.querySelector(".overlay")) return;
       e.preventDefault();
       void upload(files);
     }
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId]);
+  }, [listUrl]);
 
   async function upload(files: FileList | null) {
     if (!files?.length) return;
@@ -69,7 +78,7 @@ export default function Attachments({ taskId }: { taskId: number }) {
           ? new File([file], `paste-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.${file.name.split(".").pop()}`, { type: file.type })
           : file;
         const { blob, name, type } = await prepare(named);
-        const res = await fetch(`/api/tasks/${taskId}/attachments`, {
+        const res = await fetch(listUrl, {
           method: "POST",
           headers: { "content-type": type, "x-filename": encodeURIComponent(name) },
           body: blob,
@@ -80,6 +89,7 @@ export default function Attachments({ taskId }: { taskId: number }) {
         }
       }
       await load();
+      setOpen(true);
       void qc.invalidateQueries({ queryKey: ["project"] });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -90,27 +100,20 @@ export default function Attachments({ taskId }: { taskId: number }) {
   }
 
   async function remove(id: number) {
-    await api(`/api/attachments/${id}`, { method: "DELETE" });
+    await api(fileUrl(id), { method: "DELETE" });
     await load();
     void qc.invalidateQueries({ queryKey: ["project"] });
   }
 
-  return (
-    <div
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => { e.preventDefault(); void upload(e.dataTransfer.files); }}
-    >
-      <h3 style={{ fontSize: 14, margin: "14px 0 6px" }}>
-        Attachments {items.length > 0 && `(${items.length})`}
-      </h3>
-
+  const body = (
+    <>
       {items.length > 0 && (
         <div className="attach-grid">
           {items.map((a) => (
             <div key={a.id} className="attach-item">
-              <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" title={a.filename}>
+              <a href={fileUrl(a.id)} target="_blank" rel="noreferrer" title={a.filename}>
                 {a.content_type.startsWith("image/")
-                  ? <img src={`/api/attachments/${a.id}`} alt={a.filename} loading="lazy" />
+                  ? <img src={fileUrl(a.id)} alt={a.filename} loading="lazy" />
                   : <span className="attach-file">{a.filename.split(".").pop()?.toUpperCase() || "FILE"}</span>}
               </a>
               <div className="attach-meta">
@@ -130,9 +133,36 @@ export default function Attachments({ taskId }: { taskId: number }) {
         onChange={(e) => void upload(e.target.files)}
       />
       <button className="link-btn" disabled={busy} onClick={() => fileRef.current?.click()}>
-        {busy ? "uploading…" : "+ attach photo or file"}
+        {busy ? "uploading…" : isProject ? "+ add project file" : "+ attach photo or file"}
       </button>
       {error && <p className="error-text">{error}</p>}
+    </>
+  );
+
+  const dropProps = {
+    onDragOver: (e: React.DragEvent) => e.preventDefault(),
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); void upload(e.dataTransfer.files); },
+  };
+
+  // On the project page the files sit in the header, so they stay folded to one line until opened.
+  if (isProject) {
+    return (
+      <div className="proj-files" {...dropProps}>
+        <button className={`completed-toggle${open ? " open" : ""}`} onClick={() => setOpen(!open)}>
+          <span className="caret">▸</span>
+          Files{items.length > 0 && ` (${items.length})`}
+        </button>
+        {open && body}
+      </div>
+    );
+  }
+
+  return (
+    <div {...dropProps}>
+      <h3 style={{ fontSize: 14, margin: "14px 0 6px" }}>
+        Attachments {items.length > 0 && `(${items.length})`}
+      </h3>
+      {body}
     </div>
   );
 }

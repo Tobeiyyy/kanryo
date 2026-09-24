@@ -5,6 +5,7 @@ import { api, useCreateTask, usePatchTask, useProject, useProjects } from "../ap
 import type { ProjectLink, Task, TaskStatus } from "../../shared/types";
 import TaskRow from "../components/TaskRow";
 import TaskDetail from "../components/TaskDetail";
+import Attachments from "../components/Attachments";
 
 const STATUSES: TaskStatus[] = ["review", "todo", "done"];
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -164,6 +165,7 @@ export default function Project() {
         <div className="link-chips">
           {(links as ProjectLink[]).map((l) => <LinkChip key={l.id} link={l} />)}
         </div>
+        <Attachments projectId={project.id} />
       </header>
 
       {editing && (

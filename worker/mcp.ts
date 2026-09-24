@@ -5,7 +5,7 @@ import { hmac } from "./auth";
 import { createTask, deleteTask, patchTask, toBriefTask } from "./tasks";
 import { normalizeStatus } from "./taskLogic";
 import { ACCENTS, KINDS, attachLabels, attachTags, setProjectTags } from "./projects";
-import { listAttachments } from "./attachments";
+import { listAttachments, listProjectFiles } from "./attachments";
 import { extractJpegPages, hasRealText } from "./pdfImages";
 
 export type RpcMessage = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
@@ -62,15 +62,24 @@ export const TOOL_DEFS = [
     },
   },
   {
+    name: "list_project_files",
+    description: "List the reference files that belong to a whole Kanryo project rather than one task — briefs, specs, exports, reference PDFs — id, filename, type, size. Check this when working on a project and the user mentions 'the spec', 'the brief', 'the file in the project', or when a task refers to a document that isn't attached to the task itself; then read one with view_attachment { project_file_id }.",
+    inputSchema: {
+      type: "object",
+      properties: { project_id: { type: "integer" } },
+      required: ["project_id"],
+    },
+  },
+  {
     name: "view_attachment",
-    description: "Fetch one attachment by id and return it for use. Images come back as an image you can actually see and reason about (a screenshot of a bug, a photo of a whiteboard, a receipt). Text files come back as text. Documents (pdf, docx, xlsx, odt, ods, numbers) are converted to Markdown text on the server, at any size; long documents come back in parts — the reply says 'part N of M', call again with part: N+1 to read on. Only other binaries (zip, scanned PDFs with no text layer, ...) come back as base64 or a download instruction. Get attachment ids from list_task_attachments.",
+    description: "Fetch one file and return it for use: a task attachment (attachment_id, from list_task_attachments) or a project file (project_file_id, from list_project_files) — pass exactly one. Images come back as an image you can actually see and reason about (a screenshot of a bug, a photo of a whiteboard, a receipt). Text files come back as text. Documents (pdf, docx, xlsx, odt, ods, numbers) are converted to Markdown text on the server, at any size; long documents come back in parts — the reply says 'part N of M', call again with part: N+1 to read on. Scanned PDFs come back as page images. Only other binaries (zip, ...) come back as base64 or a download instruction.",
     inputSchema: {
       type: "object",
       properties: {
         attachment_id: { type: "integer" },
+        project_file_id: { type: "integer" },
         part: { type: "integer", minimum: 1, description: "Which part of a long converted document to return, starting at 1. Omit for the first part." },
       },
-      required: ["attachment_id"],
     },
   },
   {
@@ -357,14 +366,26 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
       const files = await listAttachments(c.env.DB, args.task_id);
       return { attachments: files };
     }
+    case "list_project_files": {
+      const project = await requireProject(c, args.project_id);
+      return { project: project.name, files: await listProjectFiles(c.env.DB, project.id) };
+    }
     case "view_attachment": {
-      if (typeof args.attachment_id !== "number") throw new ToolError("attachment_id is required");
+      const isProjectFile = typeof args.project_file_id === "number";
+      if (!isProjectFile && typeof args.attachment_id !== "number") {
+        throw new ToolError("pass attachment_id (from list_task_attachments) or project_file_id (from list_project_files)");
+      }
+      const fileId: number = isProjectFile ? args.project_file_id : args.attachment_id;
       const row = await c.env.DB.prepare(
-        "SELECT key, filename, content_type, size FROM task_attachments WHERE id = ?",
-      ).bind(args.attachment_id).first<{ key: string; filename: string; content_type: string; size: number }>();
-      if (!row) throw new ToolError(`attachment ${args.attachment_id} not found — call list_task_attachments first`);
+        `SELECT key, filename, content_type, size FROM ${isProjectFile ? "project_files" : "task_attachments"} WHERE id = ?`,
+      ).bind(fileId).first<{ key: string; filename: string; content_type: string; size: number }>();
+      if (!row) {
+        throw new ToolError(isProjectFile
+          ? `project file ${fileId} not found — call list_project_files first`
+          : `attachment ${fileId} not found — call list_task_attachments first`);
+      }
       const object = await c.env.BUCKET.get(row.key);
-      if (!object) throw new ToolError(`the stored file for attachment ${args.attachment_id} is missing`);
+      if (!object) throw new ToolError(`the stored file for ${row.filename} is missing`);
       const buf = await object.arrayBuffer();
       if (row.content_type.startsWith("image/")) {
         return {
@@ -436,7 +457,7 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
         __mcp_content: [{
           type: "text",
           text: `${row.filename} (${row.content_type}, ${row.size} bytes) is larger than the ${Math.round(MAX_INLINE_BYTES / 1024)} KB inline limit.\n`
-            + `Download it instead: GET ${origin}/api/attachments/${args.attachment_id} with the Kanryo bearer token, save it as "${row.filename}", then open it locally.`,
+            + `Download it instead: GET ${origin}/api/${isProjectFile ? "project-files" : "attachments"}/${fileId} with the Kanryo bearer token, save it as "${row.filename}", then open it locally.`,
         }],
       };
     }
