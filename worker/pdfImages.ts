@@ -58,3 +58,42 @@ export function hasRealText(markdown: string): boolean {
     .trim();
   return body.length >= 50;
 }
+
+/** JPEG bytes per view_attachment call; base64 makes the response about a third larger. */
+export const SCAN_BYTES_PER_CALL = 3 * 1024 * 1024;
+
+/**
+ * Which scanned pages (0-based, inclusive) to return in one call. Starts at `pages` ("5" or
+ * "5-9", 1-based) or at the first page of greedy chunk `part` (kept for clients that learned
+ * the old part-based paging), then takes pages in order until the byte budget is spent. A
+ * single page larger than the budget still goes out alone. `rest` is what is left of the
+ * requested range, so the reply can say exactly where to continue. Null for malformed pages.
+ */
+export function pickScanPages(
+  sizes: number[], req: { pages?: unknown; part?: unknown }, budget = SCAN_BYTES_PER_CALL,
+): { from: number; to: number; rest: [number, number] | null } | null {
+  const total = sizes.length;
+  let start = 0;
+  let end = total - 1;
+  if (req.pages !== undefined && req.pages !== null && req.pages !== "") {
+    const m = /^\s*(\d+)\s*(?:-\s*(\d+)\s*)?$/.exec(String(req.pages));
+    if (!m) return null;
+    start = Math.min(Math.max(1, Number(m[1])), total) - 1;
+    end = Math.min(Math.max(start + 1, Number(m[2] ?? m[1])), total) - 1;
+  } else if (req.part !== undefined) {
+    const wanted = Math.max(1, Math.floor(Number(req.part)) || 1);
+    let chunk = 1;
+    let used = 0;
+    for (let i = 0; i < total; i++) {
+      if (i > start && used + sizes[i] > budget) {
+        if (chunk === wanted) break;
+        chunk++; start = i; used = 0;
+      }
+      used += sizes[i];
+    }
+  }
+  let to = start;
+  let used = sizes[start];
+  while (to < end && used + sizes[to + 1] <= budget) { to++; used += sizes[to]; }
+  return { from: start, to, rest: to < end ? [to + 1, end] : null };
+}

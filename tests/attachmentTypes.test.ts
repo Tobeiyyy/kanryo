@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isConvertibleDocument, isTextual, pageText } from "../worker/mcp";
 import { toBriefTask } from "../worker/tasks";
-import { extractJpegPages, hasRealText } from "../worker/pdfImages";
+import { extractJpegPages, hasRealText, pickScanPages } from "../worker/pdfImages";
 
 describe("isTextual (the xlsx-as-garbage bug)", () => {
   it("does NOT treat Office formats as text, even though their mime contains 'xml'", () => {
@@ -99,6 +99,32 @@ describe("extractJpegPages (scanned page images)", () => {
   it("ignores images in other encodings", async () => {
     const buf = pdf(["1 0 obj\n<< /Subtype /Image /Filter /JBIG2Decode >>\nstream\n", jpeg(4), "\nendstream\nendobj\n"]);
     expect(await extractJpegPages(buf)).toEqual([]);
+  });
+});
+
+describe("pickScanPages (scanned pages per call)", () => {
+  const phone = Array(40).fill(420); // a 40-page phone scan, sizes in "KB", budget 3000
+  it("fills a call up to the byte budget instead of a fixed page count", () => {
+    expect(pickScanPages(phone, {}, 3000)).toEqual({ from: 0, to: 6, rest: [7, 39] });
+  });
+  it("continues from where the reply said, and stops at the end", () => {
+    expect(pickScanPages(phone, { pages: "8-40" }, 3000)).toEqual({ from: 7, to: 13, rest: [14, 39] });
+    expect(pickScanPages(phone, { pages: "36-40" }, 3000)).toEqual({ from: 35, to: 39, rest: null });
+  });
+  it("jumps straight to a single page or range", () => {
+    expect(pickScanPages(phone, { pages: "12" }, 3000)).toEqual({ from: 11, to: 11, rest: null });
+    expect(pickScanPages(phone, { pages: "12-14" }, 3000)).toEqual({ from: 11, to: 13, rest: null });
+  });
+  it("clamps ranges past the end and rejects garbage", () => {
+    expect(pickScanPages([100, 100], { pages: "5-9" }, 3000)).toEqual({ from: 1, to: 1, rest: null });
+    expect(pickScanPages(phone, { pages: "abc" }, 3000)).toBeNull();
+  });
+  it("sends one oversized page alone rather than nothing", () => {
+    expect(pickScanPages([5000, 100], {}, 3000)).toEqual({ from: 0, to: 0, rest: [1, 1] });
+  });
+  it("keeps the old part-based paging working for cached clients", () => {
+    expect(pickScanPages(phone, { part: 2 }, 3000)).toEqual({ from: 7, to: 13, rest: [14, 39] });
+    expect(pickScanPages(phone, { part: 99 }, 3000)?.from).toBe(35);
   });
 });
 

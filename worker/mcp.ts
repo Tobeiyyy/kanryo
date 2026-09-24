@@ -6,7 +6,7 @@ import { createTask, deleteTask, patchTask, toBriefTask } from "./tasks";
 import { normalizeStatus } from "./taskLogic";
 import { ACCENTS, KINDS, attachLabels, attachTags, setProjectTags } from "./projects";
 import { listAttachments, listProjectFiles } from "./attachments";
-import { extractJpegPages, hasRealText } from "./pdfImages";
+import { extractJpegPages, hasRealText, pickScanPages } from "./pdfImages";
 
 export type RpcMessage = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
 
@@ -72,13 +72,14 @@ export const TOOL_DEFS = [
   },
   {
     name: "view_attachment",
-    description: "Fetch one file and return it for use: a task attachment (attachment_id, from list_task_attachments) or a project file (project_file_id, from list_project_files) — pass exactly one. Images come back as an image you can actually see and reason about (a screenshot of a bug, a photo of a whiteboard, a receipt). Text files come back as text. Documents (pdf, docx, xlsx, odt, ods, numbers) are converted to Markdown text on the server, at any size; long documents come back in parts — the reply says 'part N of M', call again with part: N+1 to read on. Scanned PDFs come back as page images. Only other binaries (zip, ...) come back as base64 or a download instruction.",
+    description: "Fetch one file and return it for use: a task attachment (attachment_id, from list_task_attachments) or a project file (project_file_id, from list_project_files) — pass exactly one. Images come back as an image you can actually see and reason about (a screenshot of a bug, a photo of a whiteboard, a receipt). Text files come back as text. Documents (pdf, docx, xlsx, odt, ods, numbers) are converted to Markdown text on the server, at any size; long documents come back in parts — the reply says 'part N of M', call again with part: N+1 to read on. Scanned PDFs come back as page images, several per call — pass pages to jump straight to the ones you need. Only other binaries (zip, ...) come back as base64 or a download instruction.",
     inputSchema: {
       type: "object",
       properties: {
         attachment_id: { type: "integer" },
         project_file_id: { type: "integer" },
-        part: { type: "integer", minimum: 1, description: "Which part of a long converted document to return, starting at 1. Omit for the first part." },
+        part: { type: "integer", minimum: 1, description: "Text documents: which part of a long converted document to return, starting at 1. Omit for the first part." },
+        pages: { type: "string", description: 'Scanned PDFs: which pages to return, e.g. "12" or "12-15". Omit to start at page 1. Each call returns as many of those pages as fit in about 3 MB, and the reply says where to continue.' },
       },
     },
   },
@@ -301,8 +302,6 @@ export function isConvertibleDocument(contentType: string, filename: string): bo
 /** Characters per part: large enough that a typical exam PDF fits in one or two calls. */
 export const PART_CHARS = 40_000;
 
-/** A scanned page is ~250 KB of JPEG; two per call keeps a tool result well under a MB. */
-const SCAN_PAGES_PER_PART = 2;
 
 export function pageText(text: string, part: number, size = PART_CHARS): { body: string; part: number; parts: number } {
   const parts = Math.max(1, Math.ceil(text.length / size));
@@ -411,17 +410,19 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
         if (isPdf && !hasRealText(text)) {
           const pages = await extractJpegPages(buf);
           if (pages.length > 0) {
-            const parts = Math.ceil(pages.length / SCAN_PAGES_PER_PART);
-            const part = Math.min(Math.max(1, Math.floor(Number(args.part)) || 1), parts);
-            const first = (part - 1) * SCAN_PAGES_PER_PART;
-            const shown = pages.slice(first, first + SCAN_PAGES_PER_PART);
-            const more = part < parts ? ` Call view_attachment again with part: ${part + 1} for the next pages.` : "";
+            const pick = pickScanPages(pages.map((p) => p.byteLength), { pages: args.pages, part: args.part });
+            if (!pick) throw new ToolError('pages must look like "5" or "5-9"');
+            const shown = pages.slice(pick.from, pick.to + 1);
+            const more = pick.rest
+              ? ` For the rest, call view_attachment again with pages: "${pick.rest[0] + 1}-${pick.rest[1] + 1}".`
+              : "";
             return {
               __mcp_content: [
                 {
                   type: "text",
                   text: `${row.filename} is a scanned PDF with no text layer, so its pages come back as images — `
-                    + `pages ${first + 1}–${first + shown.length} of ${pages.length} (part ${part} of ${parts}).${more}`,
+                    + `pages ${pick.from + 1}–${pick.to + 1} of ${pages.length}.${more}`
+                    + ` To jump to specific pages, pass pages: "12" or "12-15".`,
                 },
                 ...shown.map((p) => ({ type: "image", data: base64(p.slice().buffer), mimeType: "image/jpeg" })),
               ],
