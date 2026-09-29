@@ -276,6 +276,9 @@ Deleted tasks leave a tombstone so their event still gets cleaned up.
 - **The setup stops at R2 or at the deploy:** it names the step; almost always
   one of the two dashboard switches under "What you need" is missing.
 - **Forgot the password:** `npx wrangler secret put APP_PASSWORD` sets a new one.
+- **Windows: `npm run migrate:local` fails with "internal error":** the folder path
+  is too long for Windows once wrangler adds its local database path. Clone into a
+  short folder such as `C:\kanryo`.
 
 ## Development
 
