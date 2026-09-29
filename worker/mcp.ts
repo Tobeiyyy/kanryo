@@ -420,7 +420,8 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
       if (!item) throw new ToolError(`saved item ${String(args.id)} not found — it may have been unsaved or be older than the 100 most recent saves; call list_reddit_saved`);
       if (name === "get_reddit_saved") return { item };
       const existing = await c.env.DB.prepare("SELECT id, title, project_id, status FROM tasks WHERE instr(notes, ?) > 0 LIMIT 1")
-        .bind(item.url).first();
+        // Whole line only: a post's URL is a prefix of the URL of every comment saved on it.
+        .bind(`\n${item.url}\n`).first();
       if (existing) return { task: existing, note: "already imported earlier" };
       const where = [item.subreddit, item.author ? `u/${item.author.replace(/^\/?u\//, "")}` : null].filter(Boolean).join(", ");
       const r = await createTask(c, {
