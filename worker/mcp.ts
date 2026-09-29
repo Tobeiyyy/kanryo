@@ -7,6 +7,7 @@ import { normalizeStatus } from "./taskLogic";
 import { ACCENTS, KINDS, attachLabels, attachTags, setProjectTags } from "./projects";
 import { listAttachments, listProjectFiles } from "./attachments";
 import { extractJpegPages, hasRealText, pickScanPages } from "./pdfImages";
+import { savedWithCache, toBriefSaved } from "./reddit";
 
 export type RpcMessage = { jsonrpc?: string; id?: number | string | null; method?: string; params?: any };
 
@@ -81,6 +82,35 @@ export const TOOL_DEFS = [
         part: { type: "integer", minimum: 1, description: "Text documents: which part of a long converted document to return, starting at 1. Omit for the first part." },
         pages: { type: "string", description: 'Scanned PDFs: which pages to return, e.g. "12" or "12-15". Omit to start at page 1. Each call returns as many of those pages as fit in about 3 MB, and the reply says where to continue.' },
       },
+    },
+  },
+  {
+    name: "list_reddit_saved",
+    description: "List the user's saved Reddit posts and comments (newest save first, up to the 100 most recent) — id, title, subreddit, author, url, date and a 300-character excerpt. Reddit blocks direct fetches of reddit.com links, so this is the way to read what the user saved. Pass search to filter by words in title, text or subreddit. Use get_reddit_saved for one item's full text. When a saved post is worth discussing later, offer import_reddit_saved to put it into the Kanryo inbox.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        search: { type: "string", description: "case-insensitive filter on title, text and subreddit" },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "max items returned, default 25" },
+      },
+    },
+  },
+  {
+    name: "get_reddit_saved",
+    description: "Fetch ONE saved Reddit post or comment in full (all of its text), by the id from list_reddit_saved (t3_... posts, t1_... comments).",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+    },
+  },
+  {
+    name: "import_reddit_saved",
+    description: "Copy one saved Reddit post or comment into the Kanryo inbox as a task (it lands in 'To review'), with the link and the full text in its notes, so it can be discussed later even after it is unsaved or drops out of the feed. Ask the user before calling. Returns the existing task instead if that post was imported before.",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
     },
   },
   {
@@ -364,6 +394,41 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
       if (typeof args.task_id !== "number") throw new ToolError("task_id is required");
       const files = await listAttachments(c.env.DB, args.task_id);
       return { attachments: files };
+    }
+    case "list_reddit_saved":
+    case "get_reddit_saved":
+    case "import_reddit_saved": {
+      if (!c.env.REDDIT_SAVED_FEED) {
+        throw new ToolError("Reddit is not connected: set the REDDIT_SAVED_FEED secret to the private saved-posts RSS URL from old.reddit.com/prefs/feeds");
+      }
+      let feed;
+      try { feed = await savedWithCache(c.env.DB, c.env.REDDIT_SAVED_FEED); } catch (e) { throw new ToolError(e instanceof Error ? e.message : String(e)); }
+      const saved = feed.items;
+      if (name === "list_reddit_saved") {
+        const q = typeof args.search === "string" ? args.search.toLowerCase().trim() : "";
+        const hits = q
+          ? saved.filter((s) => `${s.title}\n${s.text}\n${s.subreddit ?? ""}`.toLowerCase().includes(q))
+          : saved;
+        const limit = typeof args.limit === "number" ? Math.min(Math.max(1, args.limit), 100) : 25;
+        return {
+          total_in_feed: saved.length, matching: hits.length, as_of: feed.fetched_at,
+          ...(feed.stale ? { note: "Reddit is rate-limiting; this is the last copy Kanryo fetched" } : {}),
+          items: hits.slice(0, limit).map(toBriefSaved),
+        };
+      }
+      const item = saved.find((s) => s.id === String(args.id ?? "").trim());
+      if (!item) throw new ToolError(`saved item ${String(args.id)} not found — it may have been unsaved or be older than the 100 most recent saves; call list_reddit_saved`);
+      if (name === "get_reddit_saved") return { item };
+      const existing = await c.env.DB.prepare("SELECT id, title, project_id, status FROM tasks WHERE instr(notes, ?) > 0 LIMIT 1")
+        .bind(item.url).first();
+      if (existing) return { task: existing, note: "already imported earlier" };
+      const where = [item.subreddit, item.author ? `u/${item.author.replace(/^\/?u\//, "")}` : null].filter(Boolean).join(", ");
+      const r = await createTask(c, {
+        title: item.title,
+        notes: `Saved on Reddit (${item.kind}${where ? `, ${where}` : ""}).\n${item.url}\n\n${item.text}`,
+      });
+      if (r.error) throw new ToolError(r.error);
+      return { task: r.task, note: "added to the inbox for later review" };
     }
     case "list_project_files": {
       const project = await requireProject(c, args.project_id);

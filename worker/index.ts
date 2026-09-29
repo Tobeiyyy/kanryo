@@ -16,6 +16,8 @@ export type Env = {
   KANRYO_TOKEN: string;
   BUCKET: R2Bucket;
   AI: Ai;
+  /** Optional: private saved-posts RSS URL from old.reddit.com/prefs/feeds. */
+  REDDIT_SAVED_FEED?: string;
 };
 
 export type App = Hono<{ Bindings: Env }>;

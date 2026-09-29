@@ -152,6 +152,21 @@ finished the offline mode, mark it done".
 
 ![Completed projects](docs/screenshots/completed-projects.png)
 
+## Saved Reddit posts (optional)
+
+Claude can't open reddit.com links, so saving a post "for later" never helped much. Kanryo
+can read your saved posts through Reddit's private RSS feed, which needs no API app:
+
+1. On old.reddit.com/prefs/feeds, turn on "enable private RSS feeds" and copy the URL of
+   the **saved** feed.
+2. Store it as a secret (the token in it works like a password):
+   ```bash
+   npx wrangler secret put REDDIT_SAVED_FEED
+   ```
+
+Claude can then list and search your last 100 saves, read one in full, and copy one into
+the inbox so it's still there after you unsave it.
+
 ## Decisions that might look like gaps
 
 One password, one bearer token, that is the whole auth model. Accounts would mean a
