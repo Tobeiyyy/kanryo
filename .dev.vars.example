@@ -1,0 +1,8 @@
+# Local development only (npm run dev). Copy to .dev.vars; .dev.vars is gitignored.
+APP_PASSWORD=dev
+AUTH_SECRET=local-dev-secret-change-me
+KANRYO_TOKEN=dev-token
+# Optional:
+# GCAL_CLIENT_EMAIL=
+# GCAL_PRIVATE_KEY=
+# REDDIT_SAVED_FEED=

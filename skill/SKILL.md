@@ -1,249 +1,180 @@
 ---
 name: kanryo
-description: "Read and update the user's Kanryo board (YOUR-WORKER.workers.dev). Use whenever work in this session touches a tracked project - finishing, starting, dropping, rescheduling or reprioritizing something (\"done with the gap report\", \"that's finished\", \"I'll do X next\", \"add a task for Y\", \"move that to todo\", \"put that in review\", \"park that one\", \"push that to Friday\", \"what's left on this\", \"update kanryo\") - when a conversation produces a project-worthy idea or new tasks, links or artifacts for a tracked project, or on any explicit request to add, check or change something in Kanryo. Also use at the natural end of a work session to reconcile the board with what actually happened. Not for generic to-do talk unrelated to a Kanryo project. Also use when the user asks to sort, triage, check or empty their inbox."
+description: "Read and update the user's Kanryo board (YOUR-WORKER.workers.dev). Use whenever work in this session touches a tracked project - finishing, starting, dropping, rescheduling or reprioritizing something (\"done with the gap report\", \"that's finished\", \"I'll do X next\", \"add a task for Y\", \"move that to todo\", \"put that in review\", \"park that one\", \"push that to Friday\", \"what's left on this\", \"update kanryo\") - when a conversation produces a project-worthy idea or new tasks, links or artifacts for a tracked project, or on any explicit request to add, check or change something in Kanryo. Also use at the natural end of a work session to reconcile the board with what actually happened, and when the user asks to sort, triage, check or empty their inbox. Not for generic to-do talk unrelated to a Kanryo project."
 ---
 
 # Kanryo
 
 Mirror what actually happens onto the Kanryo board. The user should never have
-to open Kanryo to keep it current.
+to open Kanryo just to keep it current.
 
 ## The three states
 
-- **"To review"**  - not committed; the
-  user still wants to think it through, usually by talking it over with Claude.
-  This column is his agenda of conversations to have, and most things he dumps
-  himself start here.
-- **`todo`** - decided, waiting to be done.
-- **`done`** - finished.
+- **review** ("To review" in the app) - not committed yet. The user still wants
+  to think it through, usually by talking it over with Claude. This column is
+  their agenda of conversations to have, and most raw ideas start here.
+- **todo** - decided, waiting to be done.
+- **done** - finished.
 
-Say "review" when talking to the user; The lifecycle is review -> (a conversation with
-Claude) -> todo -> (the work happens) -> done.
+The lifecycle is review -> (a conversation with Claude) -> todo -> (the work
+happens) -> done. The status values on the wire are exactly `review`, `todo`
+and `done`.
 
-## How to reach Kanryo
+## Reaching Kanryo
 
-Prefer the MCP tools: `list_projects`, `list_tasks`, `create_project`,
-`add_tasks`, `add_links`, `add_inbox_item`, `list_inbox`, `file_inbox_item`,
-`update_task`, `set_task_status`, `delete_tasks`, `set_project_completed`.
+Everything goes through the Kanryo MCP tools (the connector the user added in
+claude.ai, or the MCP server added to Claude Code). In Claude Code the tools may
+be *deferred*: present by name but without a loaded schema. Load them with one
+keyword ToolSearch before concluding they are missing:
 
-In Claude Code they are namespaced `mcp__<server-id>__list_tasks` and are
-usually *deferred* - present but with no schema loaded, so a direct call fails.
-Load them with ONE keyword ToolSearch before concluding they are missing:
+`ToolSearch { query: "kanryo project task inbox status", max_results: 20 }`
 
-`ToolSearch { query: "kanryo project task inbox status", max_results: 15 }`
+If no Kanryo tools exist in the session, say so in one line - "Kanryo isn't
+connected in this session" - and stop. Do not ask for a URL or a token and do
+not improvise a workaround.
 
-Use keyword search, not `select:` - the server-id prefix varies per machine and
-`select:` only matches full names.
+The tools:
 
-**Fallback, Claude Code only:** if no Kanryo MCP tools surface and
-`%USERPROFILE%\.claude\skills\kanryo\config.json` exists (`{url, token}`), use
-the REST API. Never use WebFetch - it cannot send an Authorization header. Use
-the PowerShell tool:
+- Projects: `list_projects` (with tags and per-status counts),
+  `create_project`, `set_project_tags`, `set_project_completed`, `add_links`
+- Tasks: `list_tasks` (pass `brief: true` to skim), `get_task` (one task in
+  full), `add_tasks` (pass `parent_id` to create subtasks), `update_task`,
+  `set_task_status`, `delete_tasks`
+- Inbox: `list_inbox`, `add_inbox_item`, `file_inbox_item`
+- Files: `list_task_attachments`, `list_project_files`, `view_attachment`
+  (images come back as images, PDFs and Office files as text, scanned PDFs as
+  page images; long documents in parts)
+- Reddit (only if the user set it up): `list_reddit_saved`,
+  `get_reddit_saved`, `import_reddit_saved`
 
-```powershell
-$cfg = Get-Content "$env:USERPROFILE\.claude\skills\kanryo\config.json" -Raw | ConvertFrom-Json
-$h = @{ authorization = "Bearer $($cfg.token)" }
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-
-Invoke-RestMethod -Uri "$($cfg.url)/api/projects" -Headers $h              # id, name, per-status counts
-Invoke-RestMethod -Uri "$($cfg.url)/api/projects/17" -Headers $h           # .project, .links, .tasks (full notes)
-Invoke-RestMethod -Uri "$($cfg.url)/api/tasks/58" -Headers $h              # one task by id
-Invoke-RestMethod -Uri "$($cfg.url)/api/inbox" -Headers $h                 # unclassified items
-```
-
-Writes: `POST /api/tasks`, `POST /api/projects`,
-`POST /api/projects/{id}/links`, `PATCH /api/tasks/{id}`,
-`PATCH /api/projects/{id}` with `{"completed": true}`,
-`DELETE /api/tasks/{id}`. Filing an inbox item over REST is
-`PATCH /api/tasks/{id}` with `{"project_id": N}`. Send bodies as UTF-8 bytes or
-umlauts and dashes get mangled on the way out:
-
-```powershell
-$body = @{ title = "Chapter 2 rewrite" } | ConvertTo-Json
-Invoke-RestMethod -Method Patch -Uri "$($cfg.url)/api/tasks/59" -Headers $h `
-  -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($body))
-```
-
-Shape gotchas: counts from `/api/projects` cover top-level tasks only, while
-`.tasks` from `/api/projects/{id}` also includes subtasks (non-null
-`parent_id`); and `/api/projects/{id}` nests metadata under `.project`.
-
-If neither the MCP tools nor the config file are available (for example a
-claude.ai chat with the connector switched off), say so in one line - "Kanryo
-isn't connected in this session" - and stop. Do not ask for a URL or a token,
-do not improvise a workaround.
+Projects carry free-form tags. Projects sharing a tag are related: when working
+on one, its tag siblings are where overlapping work, reusable pieces or
+conflicting plans live. Reuse existing tag spellings rather than inventing
+synonyms.
 
 ## Step 1 - resolve the project (once per session)
 
-If a project id is declared in the repo's CLAUDE.md or stated by the user, use
-it and skip the rest. Otherwise call `list_projects` and infer the match from
-the strongest signal available: repo or directory name, the subject of the
-conversation, the files and artifacts in play.
+If a project id is stated in the repo's CLAUDE.md or by the user, use it.
+Otherwise call `list_projects` and infer the match from the strongest signal:
+repo or directory name, the subject of the conversation, the files in play.
 
-- **One plausible match** -> state it in one line and proceed.
-  `Kanryo: Video Game Archive (#7).` No question, no confirmation request.
-- **Two or more** -> ask once, naming them: `Video Game Archive (#7) or
-  Github (#19)?` Project names are short and several overlap; a wrong guess
-  writes to the wrong board.
-- **No plausible match** -> say so and ask whether to create a project or drop
-  the item in the inbox.
+- **One plausible match** -> state it in one line and proceed:
+  `Kanryo: Recipe App (#7).` No confirmation request.
+- **Two or more** -> ask once, naming them: `Recipe App (#7) or Meal Planner
+  (#12)?` A wrong guess writes to the wrong board.
+- **No match** -> say so and ask whether to create a project or drop the item
+  in the inbox.
 
-Hold the resolved project for the rest of the session. Re-resolve only if the
-user names a different one.
+Hold the resolved project for the rest of the session.
 
-**Pull the board before the first answer.** When the session's opening message
-already makes clear that a tracked project is in play, resolve it and call
-`list_tasks` on it BEFORE answering - not later when something needs writing.
-The first answer should build on what the board already knows: existing tasks,
-their notes, prior decisions. Orient from titles and each note's first line
-("Stand: ..."); read a note in full only when that task is what the session is
-actually about. Until Kanryo has a short mode, `list_tasks` returns every note
-in full - so pull at most ONE project per session this way, the one clearly in
-play. If no project is clearly in play at the start, skip this and resolve
-lazily as before.
+**Pull the board before the first answer** when the opening message already
+makes clear which project is in play: call `list_tasks` with `brief: true`
+BEFORE answering, so the first answer builds on existing tasks and decisions.
+Orient from titles and each note's first line; fetch a full note with
+`get_task` only for the task the session is actually about.
 
 ## Step 2 - write, per this posture
 
 **Act without asking, then report** - these only touch tasks that already
 exist:
 
-- `set_task_status` - any move between `review` (review), `todo` and `done`
+- `set_task_status` - any move between review, todo and done
 - `update_task` - title, notes, priority, due date/time
-- `file_inbox_item` - moving an inbox item onto a project (see Inbox triage)
+- `file_inbox_item` - moving an inbox item onto a project
 
-Asking permission to close a task the user just said he finished is exactly the
-friction this skill exists to remove. Do not hedge, do not present a plan for
-approval.
+Asking permission to close a task the user just said they finished is exactly
+the friction this skill exists to remove.
 
 **Ask first** - these create or destroy:
 
 - `add_tasks` - quote the exact titles you propose, one line, then wait
-- `create_project` - **except during inbox triage**, which creates projects on
-  its own
-- `add_inbox_item`, `add_links`
+- `create_project` - except during inbox triage, which creates projects on its
+  own
+- `add_inbox_item`, `add_links`, `import_reddit_saved`
 - `set_project_completed` - check `list_tasks` first and mention any tasks
   still open when you offer
-- `delete_tasks` - always confirm, quoting titles. Finished work goes to
-  `done`, never deleted. Deleting a task takes its subtasks with it.
+- `delete_tasks` - always confirm, quoting titles. Finished work goes to done,
+  never deleted. Deleting a task takes its subtasks with it.
 
-Before adding anything, call `list_tasks` and check for a near-duplicate. If
-one exists, sharpen it with `update_task` instead of creating a second.
+Before adding anything, check `list_tasks` for a near-duplicate. If one exists,
+sharpen it with `update_task` instead of creating a second.
 
-New tasks default to `review` (review). Pass `"todo"` only for work actually
-decided on in this conversation. Only set a due_date if a real date was
-discussed - it creates a Google Calendar event, and marking the task done
-removes it again.
+New tasks default to review. Pass `todo` only for work actually decided on in
+this conversation. Only set a due_date if a real date was discussed - it
+creates a Google Calendar event (when calendar sync is set up), and marking the
+task done removes it again.
 
-**Notes convention.** Every note you write or update starts with ONE line
-`Stand: ...` stating where the thing currently stands, in plain language. All
-detail goes below it. When updating an existing note, rewrite that first line
-to match the new state - never let it go stale while details pile up
-underneath. This is what lets a later session orient from title + first line
-without reading whole notes. The rest of the note follows these rules:
+**Notes convention.** Every note you write starts with ONE line
+`Status: ...` saying where the thing currently stands, in plain language. All
+detail goes below it. When updating a note, rewrite that first line to match
+the new state. This is what lets a later session orient from title plus first
+line without reading whole notes. In the rest of the note:
 
-- **Exact numbers and names, never adjectives.** "47/51 pass, fail: pa-27,
-  pa-45", "commit 6b7e291", "3 of 8 items" - not "most pass", "nearly done",
-  "a few left". A count you do not have is written as "count not stated",
-  not estimated.
-- **Provenance on every decision.** A carried-forward choice is tagged
-  `decided` only when the user chose it in a message of his own; `agreed`
-  when he said yes to a proposal; `proposed` when it was suggested and he never
-  accepted it. A summary never promotes a tag. A note that reads "decided"
-  with no user turn behind it is downgraded and states so.
-- **Committed vs uncommitted.** Work in a repo names the commit id or branch;
-  uncommitted or unpushed work is called that.
-- **Open items are classified.** Each remaining item is `Blocked` (on what),
-  `Ready` (can start without re-investigation) or `Needs investigation`
-  (what was already tried and ruled out, so the next session does not repeat
-  it).
-- **Fidelity pass before compressing.** Before shortening or rewriting a
-  note, list every condition ("works if"), exception ("except when"),
-  uncertainty, near-alternative and dependency in it that must survive,
-  then verify the new text against that list; a dropped item is restored
-  inline ("done (assuming X)"), never by making the note longer.
-- **Ledger discipline.** A note is planning, not history: durable facts are
-  updated in place, never appended as a second version; only the last 3
-  Stand states stay in the note (newest first, one line each, dated); older
-  states are dropped from the note - they live in git, `decisions.md` or the
-  vault's `evals/runs-log.md`, and are not re-read. Hard cap 40 lines per
-  note; a note that must exceed it is two tasks. (Two-ledger rule: Kanryo and `PLAN.md` are
-  rewritten freely; `decisions.md`, the runs log and git are append-only.)
+- Exact numbers and names, not adjectives: "47/51 tests pass", "commit
+  6b7e291", "3 of 8 items" - not "most pass" or "nearly done".
+- Say whether a decision was made by the user, agreed to by the user, or only
+  proposed and never confirmed.
+- For repo work, name the commit or branch, and call uncommitted work that.
+- Classify what is left: blocked (on what), ready, or needs investigation (and
+  what was already ruled out).
+- Keep notes short: update facts in place instead of appending history.
 
 ## Step 3 - report
 
-One line per write, after the fact. No preamble, no summary paragraph, no
-restating what the user just said.
+One line per write, after the fact. No preamble, no summary paragraph.
 
 `-> done: write normalize.py | todo: write build.py`
 
-Batch multiple writes into one line. If nothing needed changing, say nothing.
+If nothing needed changing, say nothing.
 
 ## Inbox triage
 
 The inbox is where raw captures land with no project. The user does not want to
-sort it by hand, so this runs autonomously - including creating projects, which
-is the one place that overrides the "ask first" rule above.
+sort it by hand, so triage runs on its own, including creating projects.
 
-**When:** on demand ("triage my inbox", "sort my inbox", "what's in my inbox"),
-and once at the natural end of a session where this skill was already active.
-Never at session start, never twice in one session.
+**When:** on request ("triage my inbox", "sort my inbox"), and once at the
+natural end of a session where this skill was already active. Never at session
+start, never twice in one session.
 
 **Procedure:**
 
 1. `list_inbox`. Empty -> say nothing and stop.
 2. `list_projects` for candidate targets.
-3. Group the items first. Two or more sharing a theme are decided together so
-   they can share one new project rather than spawning several.
-4. Decide each item or cluster against this bar:
-   - **File into an existing project** - the item names that project's subject,
-     or its work plainly belongs beside that project's existing tasks.
-     -> `file_inbox_item`
-   - **Create a project** - the item describes a distinct deliverable implying
-     more than one step, or a cluster of two-plus items shares a theme.
-     -> `create_project` (name, icon, accent, description) with **no seeded
-     tasks**, then `file_inbox_item` for each member. Seeding would duplicate
-     the idea as a new task while the original still sat in the inbox; the
-     point is to relocate the real rows.
-   - **Leave it in the inbox** - the item carries no action, or it fits two
-     projects equally well. Make no call and name it in the report.
-5. Report one line:
+3. Group items first. Two or more sharing a theme are decided together, so
+   they can share one new project instead of spawning several.
+4. Decide each item or group:
+   - **File into an existing project** when the item names that project's
+     subject or plainly belongs beside its tasks -> `file_inbox_item`.
+   - **Create a project** when the item is a distinct deliverable with more
+     than one step, or two or more items share a theme -> `create_project`
+     with no seeded tasks, then `file_inbox_item` for each member.
+   - **Leave it in the inbox** when it carries no action or fits two projects
+     equally well. Name it in the report.
+5. Report in one line:
 
 `-> filed: colour picker -> Kanryo | 3 notes -> new project "Reading list" | left: "check that podcast" (ambiguous)`
 
-**The leave-behind rule is what makes this safe.** The failure mode should be an
-item waiting one more round, never a wrong guess landing on a real board. When
-in doubt, leave it.
-
-**Never delete.** Discarding an inbox item stays a human decision in the app.
-Triage has no delete step.
-
-Filed items keep their `review` status, so they land in the project's
-"To review" column - correct for something that has never been discussed. Never
-invent a due date during triage.
-
-If a `file_inbox_item` call fails, report that item as left behind and carry on
-with the rest. A failed triage never blocks the session.
+When in doubt, leave it: an item waiting one more round beats a wrong guess on
+a real board. Never delete during triage. Filed items keep their review status.
 
 ## Proactive offers
 
-Beyond mirroring finished work, offer (asking first, one concise question):
+Offer (asking first, one short question) when:
 
 - a conversation produced a project-worthy idea -> `create_project`, optionally
-  seeded with tasks and with links (repo remote, live URL, this chat, docs);
-  in a git repo include the remote via `git remote get-url origin`, else the
-  folder path
+  with tasks and links (repo remote, live URL, docs)
 - a review item was talked through and the user decided to go ahead -> promote
-  it to `todo` and add any concrete steps that came out of the discussion; if
-  he decided against it, offer to delete it rather than let it rot
+  it to todo and add the concrete steps that came out of it; if they decided
+  against it, offer to close it
 - something is worth keeping but not project-worthy -> `add_inbox_item`
 
-Do not file trivia. Never invent due dates. Never re-offer something declined
-in this session.
+Do not file trivia. Never invent due dates. Never re-offer something the user
+declined in this session.
 
 ## Counter-example
 
 > **User:** I should really start meal prepping on Sundays
 
-No project is in play and this is a passing thought rather than progress on
-tracked work. Do nothing. If he later says it is worth keeping,
-`add_inbox_item` - after asking.
+No project is in play and this is a passing thought, not progress on tracked
+work. Do nothing. If the user later says it is worth keeping, `add_inbox_item`,
+after asking.

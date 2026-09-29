@@ -4,5 +4,7 @@ dist
 .dev.vars
 tsconfig.tsbuildinfo
 gcal-key.json
+gcal.json
+.setup-secrets.json
 .claude/skills/impeccable/
 docs/superpowers/
