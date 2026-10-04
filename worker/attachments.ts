@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Env } from "./index";
+import { selectIn } from "./sql";
 
 type HonoEnv = { Bindings: Env };
 
@@ -40,10 +41,9 @@ export async function listProjectFiles(db: D1Database, projectId: number): Promi
  */
 export async function purgeTaskFiles(c: Context<{ Bindings: Env }>, taskIds: number[]): Promise<void> {
   if (taskIds.length === 0) return;
-  const placeholders = taskIds.map(() => "?").join(",");
-  const { results } = await c.env.DB.prepare(
-    `SELECT key FROM task_attachments WHERE task_id IN (${placeholders})`,
-  ).bind(...taskIds).all<{ key: string }>();
+  const results = await selectIn<{ key: string }>(
+    c.env.DB, (list) => `SELECT key FROM task_attachments WHERE task_id IN (${list})`, taskIds,
+  );
   await tombstone(c, results);
 }
 

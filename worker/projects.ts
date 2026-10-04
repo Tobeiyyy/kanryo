@@ -3,6 +3,7 @@ import type { Env } from "./index";
 import { queueOrphanFlush } from "./gcal";
 import { purgeProjectFiles, purgeTaskFiles } from "./attachments";
 import { toBriefTask } from "./tasks";
+import { selectIn } from "./sql";
 
 type HonoEnv = { Bindings: Env };
 
@@ -15,11 +16,10 @@ export const KINDS = ["repo", "live", "storage", "claude", "other"];
 /** Fetch labels for a set of task rows and attach them as `labels: string[]`. */
 export async function attachLabels(db: D1Database, tasks: any[]): Promise<any[]> {
   if (tasks.length === 0) return tasks;
-  const ids = tasks.map((t) => t.id);
-  const placeholders = ids.map(() => "?").join(",");
-  const { results } = await db.prepare(
-    `SELECT task_id, label FROM task_labels WHERE task_id IN (${placeholders}) ORDER BY label`,
-  ).bind(...ids).all<{ task_id: number; label: string }>();
+  const results = await selectIn<{ task_id: number; label: string }>(
+    db, (list) => `SELECT task_id, label FROM task_labels WHERE task_id IN (${list}) ORDER BY label`,
+    tasks.map((t) => t.id),
+  );
   const byTask = new Map<number, string[]>();
   for (const r of results) {
     if (!byTask.has(r.task_id)) byTask.set(r.task_id, []);
@@ -31,11 +31,10 @@ export async function attachLabels(db: D1Database, tasks: any[]): Promise<any[]>
 /** Attach `tags: string[]` to project rows, mirroring attachLabels for tasks. */
 export async function attachTags(db: D1Database, projects: any[]): Promise<any[]> {
   if (projects.length === 0) return projects;
-  const ids = projects.map((p) => p.id);
-  const placeholders = ids.map(() => "?").join(",");
-  const { results } = await db.prepare(
-    `SELECT project_id, tag FROM project_tags WHERE project_id IN (${placeholders}) ORDER BY tag`,
-  ).bind(...ids).all<{ project_id: number; tag: string }>();
+  const results = await selectIn<{ project_id: number; tag: string }>(
+    db, (list) => `SELECT project_id, tag FROM project_tags WHERE project_id IN (${list}) ORDER BY tag`,
+    projects.map((p) => p.id),
+  );
   const byProject = new Map<number, string[]>();
   for (const r of results) {
     if (!byProject.has(r.project_id)) byProject.set(r.project_id, []);
