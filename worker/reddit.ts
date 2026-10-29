@@ -105,19 +105,27 @@ export async function savedWithCache(
     ).bind(CACHE_KEY, JSON.stringify({ feed: feedHash, fetched_at, items })).run();
     return { items, fetched_at, stale: false };
   } catch (e) {
-    if (cached && e instanceof Error && e.message.startsWith("Reddit is rate-limiting")) return { ...cached, stale: true };
+    if (cached && e instanceof TemporaryRedditError) return { ...cached, stale: true };
     throw e;
   }
 }
+
+/** A refusal that says nothing about the token; the last good copy may still be served. */
+export class TemporaryRedditError extends Error {}
 
 export async function fetchSaved(feed: string, limit = 100): Promise<RedditSaved[]> {
   const res = await fetch(feedUrl(feed, limit), {
     headers: { "user-agent": "kanryo/1.0 (personal saved-posts reader)" },
   });
-  if (res.status === 403 || res.status === 401) {
-    throw new Error("Reddit refused the saved feed (token wrong or reset) — copy a fresh saved-feed URL from old.reddit.com/prefs/feeds");
+  if (res.status === 401) {
+    throw new Error("Reddit rejected the feed token (wrong or reset) — copy a fresh saved-feed URL from old.reddit.com/prefs/feeds");
   }
-  if (res.status === 429) throw new Error("Reddit is rate-limiting right now, try again in a minute");
+  // 403 with a token that opens fine in a browser: Reddit is blocking Cloudflare's server
+  // addresses. Seen 11.10.2026, gone by 29.10. with the same code and token.
+  if (res.status === 403) {
+    throw new TemporaryRedditError("Reddit is refusing Kanryo's server right now (403) — usually temporary; if the feed URL also fails in your browser, the token was reset");
+  }
+  if (res.status === 429) throw new TemporaryRedditError("Reddit is rate-limiting right now, try again in a minute");
   if (!res.ok) throw new Error(`Reddit answered ${res.status}`);
   const body = await res.text();
   if (!body.includes("<feed")) throw new Error("Reddit did not return a feed — check the saved-feed URL");

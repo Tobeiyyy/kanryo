@@ -412,7 +412,7 @@ async function callTool(c: Ctx, name: string, args: any): Promise<unknown> {
         const limit = typeof args.limit === "number" ? Math.min(Math.max(1, args.limit), 100) : 25;
         return {
           total_in_feed: saved.length, matching: hits.length, as_of: feed.fetched_at,
-          ...(feed.stale ? { note: "Reddit is rate-limiting; this is the last copy Kanryo fetched" } : {}),
+          ...(feed.stale ? { note: "Reddit is refusing or rate-limiting Kanryo right now; this is the last copy Kanryo fetched" } : {}),
           items: hits.slice(0, limit).map(toBriefSaved),
         };
       }

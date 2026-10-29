@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { feedUrl, htmlToText, parseSavedFeed, toBriefSaved } from "../worker/reddit";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { feedUrl, htmlToText, parseSavedFeed, savedWithCache, toBriefSaved } from "../worker/reddit";
 
 // A real comment entry as www.reddit.com serves it, plus a post entry in the same format.
 const FEED = `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom">
@@ -42,5 +42,42 @@ describe("feed helpers", () => {
   });
   it("leaves plain text alone", () => {
     expect(htmlToText("plain")).toBe("plain");
+  });
+});
+
+describe("savedWithCache when Reddit refuses (the 11.10. outage)", () => {
+  const FEED_URL = "https://old.reddit.com/user/x/saved.rss?feed=t&user=x";
+  async function hashOf(s: string) {
+    const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+    return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  function db(cachedValue: string | null) {
+    return {
+      prepare: () => ({
+        bind: () => ({
+          first: async () => (cachedValue ? { value: cachedValue } : null),
+          run: async () => ({}),
+        }),
+      }),
+    } as unknown as D1Database;
+  }
+  async function oldCache() {
+    return JSON.stringify({ feed: await hashOf(FEED_URL), fetched_at: "2026-10-01T00:00:00Z", items: [{ id: "t3_a" }] });
+  }
+  const respond = (status: number) => vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("x", { status }));
+  afterEach(() => vi.restoreAllMocks());
+
+  it("serves the last copy, marked stale, when Reddit answers 403", async () => {
+    respond(403);
+    const r = await savedWithCache(db(await oldCache()), FEED_URL);
+    expect(r).toMatchObject({ stale: true, items: [{ id: "t3_a" }] });
+  });
+  it("still reports a bad token on 401, even with a cached copy", async () => {
+    respond(401);
+    await expect(savedWithCache(db(await oldCache()), FEED_URL)).rejects.toThrow(/token/);
+  });
+  it("explains the block when there is nothing cached yet", async () => {
+    respond(403);
+    await expect(savedWithCache(db(null), FEED_URL)).rejects.toThrow(/refusing Kanryo's server/);
   });
 });
