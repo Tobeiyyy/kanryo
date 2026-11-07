@@ -1,9 +1,9 @@
 # Kanryo
 
-If you combine a kanban board, a notes inbox and Claude's memory you would probably
-get something like Kanryo. It is a project board for exactly one person, it runs on
-Cloudflare's free tier, and it serves an MCP endpoint so every Claude surface reads
-and writes the same board I tap on my phone.
+Kanryo is roughly a kanban board, a notes inbox and Claude's memory in one. It is a project
+board for exactly one person, it runs on Cloudflare's free tier, and it serves an
+MCP endpoint, so every Claude surface reads and writes the same board I tap on my
+phone.
 
 完了 (*kanryo*) means "completed".
 
@@ -14,28 +14,27 @@ and writes the same board I tap on my phone.
 I did not need a team tool. I needed a place to throw ideas at 11pm without filling
 in five fields first, and I wanted Claude to still know about them next week.
 
-Chats forget. Claude Code forgets. I got really tired of re-explaining my own projects to a model that helped me build
-them, so the board became an overarching memory instead. A chat can look up what is still open,
-close a task when we finish something, or read a note I wrote in June and completely
-forgot about. Similarly Cowork can obviously also look this up.
+Chats forget, and so does Claude Code. I got tired of re-explaining my own projects
+to a model that helped me build them, so the board became an overarching memory
+instead. A chat can look up what is still open, close a task when we finish
+something, or read a note I wrote in June and forgot about. Cowork can look it up
+too.
 
 ## What it does
 
 Tasks sit in three columns: to review, to do, done. New ones land in "to review",
-which is my way of saying I have not committed to this yet. That column turned into
-a list of things I want to talk through with Claude first, this way I am not afraid 
-to add lots of new ideas, because half of mine are probably not doable and claude 
-will tell me immediately if it is something already made, something doable, or something
-that is not possible.
+which is my way of saying I have not committed to this yet. That column became a
+list of things I want to talk through with Claude first. So I add ideas freely:
+half of mine are probably not doable, and Claude tells me right away whether
+something already exists, is doable, or is not possible.
 
 ![Project board](docs/screenshots/project-board.png)
 
-Capture is one box at the top of the dashboard. Type the thought, hit send, thats it
-It's made with as little friction as possible so you are able to capture your ideas
-as soon as they happen and can instantly rest assured they are there whenever you 
-want to discuss them deeper. No confirm button. It lands in an inbox and gets sorted 
-later, by me in one tap or by Claude when I ask it to triage. You can even set up a 
-scheduled task for this weekly or so.
+Capture is one box at the top of the dashboard. Type the thought and hit send, with
+no confirm button. The point is as little friction as possible: you catch an idea
+the moment you have it, and it is there whenever you want to discuss it. It lands
+in an inbox and gets sorted later, by me in one tap or by Claude when I ask it to
+triage. You can also have a scheduled task do the triage, weekly for example.
 
 Whatever you type is mirrored to localStorage on every keystroke and
 kept with a visible retry if the request fails.
@@ -44,9 +43,9 @@ Projects hold a description, tags and links: a repo, a live URL, a folder path o
 your machine, a Claude chat. Tags group related projects and filter the dashboard.
 
 Tasks have priorities, labels, subtasks, due dates and attachments. Photos and
-files go to R2, images get downscaled in the browser first cause a 6MB phone photo
-helps nobody. Claude can actually look at the attachments. I screenshot a bug on
-my phone, attach it, and a chat two days later can see exactly what I saw. Paste a
+files go to R2. Images get downscaled in the browser first, because a 6MB phone
+photo helps nobody. Claude can look at the attachments: I screenshot a bug on my
+phone, attach it, and a chat two days later sees exactly what I saw. Paste a
 screenshot straight into an open task with Ctrl+V. PDFs, Word and Excel files come
 back to Claude as text, scanned PDFs as page images. Files that belong to a whole
 project rather than one task (a brief, a spec) go in the project's Files section.
@@ -54,17 +53,16 @@ project rather than one task (a brief, a spec) go in the project's Files section
 A Pulse page shows every active project side by side, sorted by how much is still
 undecided.
 
-Speaking of phone - bookmark the URL of your Kanryo as a PWA on your home screen, 
-synced and able to store your ideas wherever you are. Plus it looks as clean as it 
-does on desktop aswell!
+On a phone, add your Kanryo URL to the home screen as a PWA. It stays synced, so you
+can store ideas wherever you are, and it looks as clean as it does on desktop.
 
 Give a task a due date and it appears as an event on a Google Calendar you set
 aside for it. Finish the task, the event disappears. All the reminding is Google's
 job, so this app sends no notifications at all.
 
 Finished projects fold into a drawer at the bottom of the dashboard. Projects with
-nothing open left just fade out where they stand, useful for projects you know you will
-have no feature ideas about.
+nothing left open fade out where they stand, which suits projects you don't expect
+new feature ideas for.
 
 ![Task detail](docs/screenshots/task-detail.png)
 
@@ -113,9 +111,10 @@ npm run setup
 ```
 
 It creates the database and the file bucket, applies the schema, deploys the app
-and sets its secrets. It asks you for one thing, a login password of at least 12
+and sets its secrets. It asks you for one thing: a login password of at least 12
 characters (press Enter to have one generated). Logins are capped at 5 attempts
-per minute per IP, so a wrong guess or two just means a short wait. At the end it prints three things. Save them somewhere safe:
+per minute per IP, so a wrong guess or two just means a short wait. At the end it
+prints three things. Save them somewhere safe:
 
 - your app URL
 - your login password
@@ -164,7 +163,7 @@ npm run deploy
 
 Kanryo writes to one calendar you set aside for it through a service account, so
 there is no OAuth flow and nothing to refresh. This is the fiddliest part of the
-whole setup, and it is skippable.
+setup, and you can skip it.
 
 1. In [Google Cloud Console](https://console.cloud.google.com): pick or create a
    project, enable the Google Calendar API, create a service account, and download
@@ -211,10 +210,10 @@ like a password.
 
 ### The skill
 
-Then there is [`skill/SKILL.md`](skill/SKILL.md), and I would argue it matters more
-than the tools do. It tells Claude to close a task the moment you say you finished
-it, no asking, but to always ask before creating or deleting anything. My first
-version asked permission for every single write. I stopped using it within a day.
+I'd argue [`skill/SKILL.md`](skill/SKILL.md) matters more than the tools. It tells
+Claude to close a task the moment you say you finished it, without asking, but to
+always ask before creating or deleting anything. My first version asked permission
+for every write, and I stopped using it within a day.
 
 1. In `skill/SKILL.md`, replace `YOUR-WORKER.workers.dev` with your app's address.
 2. **claude.ai:** put the file in a folder called `kanryo`, zip that folder, and
@@ -306,11 +305,10 @@ placeholder until `npm run setup` writes yours.
 
 ## Who this is for
 
-If you just want a kanban board there are a hundred better maintained ones. The
-people who will get something out of Kanryo are the ones already living half their
-projects inside Claude, who are tired of every chat starting from zero. For that
-specific problem, this is the best tool I know of, mostly because I built it around
-exactly that annoyance.
+If you just want a kanban board, there are a hundred better-maintained ones. Kanryo
+is for people who already run half their projects inside Claude and are tired of
+every chat starting from zero. For that problem it is the best tool I know of,
+mostly because I built it around exactly that annoyance.
 
 ## License
 
