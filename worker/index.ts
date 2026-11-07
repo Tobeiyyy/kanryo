@@ -16,6 +16,8 @@ export type Env = {
   KANRYO_TOKEN: string;
   BUCKET: R2Bucket;
   AI: Ai;
+  /** Workers rate-limit binding (wrangler.jsonc "ratelimits"): caps login attempts per IP. */
+  LOGIN_LIMITER: RateLimit;
   /** Optional: private saved-posts RSS URL from old.reddit.com/prefs/feeds. */
   REDDIT_SAVED_FEED?: string;
 };
@@ -47,6 +49,10 @@ app.use("/api/*", authMiddleware);
 app.get("/api/health", (c) => c.json({ ok: true }));
 
 app.post("/api/auth/login", async (c) => {
+  // Every attempt counts against a per-IP budget, so the password can't be brute-forced.
+  const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+  const { success } = await c.env.LOGIN_LIMITER.limit({ key: `login:${ip}` });
+  if (!success) return c.json({ error: "too many attempts, wait a minute" }, 429);
   const { password } = await c.req.json<{ password: string }>();
   // Compare HMAC digests rather than raw strings so a failed login can't time-probe the password.
   const [supplied, expected] = await Promise.all([

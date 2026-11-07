@@ -80,7 +80,11 @@ if (hasSecrets) {
   console.log("    secrets already set, kept as they are (login and connector URL unchanged)");
 } else {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  password = (await rl.question("    App password (empty = generate one): ")).trim();
+  for (;;) {
+    password = (await rl.question("    App password, 12+ characters (empty = generate one): ")).trim();
+    if (!password || password.length >= 12) break;
+    console.log("    too short, use at least 12 characters");
+  }
   rl.close();
   generated = !password;
   if (generated) password = "kanryo-" + randomBytes(6).toString("hex");

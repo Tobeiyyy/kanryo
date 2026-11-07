@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   async function submit(e: React.FormEvent) {
@@ -14,7 +14,7 @@ export default function Login() {
       body: JSON.stringify({ password }),
     });
     if (res.ok) navigate("/");
-    else setError(true);
+    else setError(res.status === 429 ? "Too many attempts. Wait a minute, then try again." : "Wrong password.");
   }
 
   return (
@@ -25,7 +25,7 @@ export default function Login() {
           className="input" type="password" placeholder="Password" autoFocus
           value={password} onChange={(e) => setPassword(e.target.value)}
         />
-        {error && <p className="error-text">Wrong password.</p>}
+        {error && <p className="error-text">{error}</p>}
         <button className="btn btn-primary" type="submit">Sign in</button>
       </form>
     </div>

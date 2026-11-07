@@ -81,7 +81,7 @@ About 10 minutes. Everything runs in your own Cloudflare account on the free tie
 ### What you need
 
 - A free [Cloudflare account](https://dash.cloudflare.com/sign-up).
-- [Node.js](https://nodejs.org) 20 or newer (`node -v` to check) and git.
+- [Node.js](https://nodejs.org) 22.12 or newer (`node -v` to check) and git.
 - Two one-time switches in the Cloudflare dashboard, which the setup can't flip
   for you:
   1. **Workers & Pages**: open it once and pick your workers.dev subdomain. Your
@@ -113,8 +113,9 @@ npm run setup
 ```
 
 It creates the database and the file bucket, applies the schema, deploys the app
-and sets its secrets. It asks you for one thing, a login password (press Enter to
-have one generated). At the end it prints three things. Save them somewhere safe:
+and sets its secrets. It asks you for one thing, a login password of at least 12
+characters (press Enter to have one generated). Logins are capped at 5 attempts
+per minute per IP, so a wrong guess or two just means a short wait. At the end it prints three things. Save them somewhere safe:
 
 - your app URL
 - your login password
@@ -137,7 +138,7 @@ npx wrangler d1 create kanryo          # put the printed database_id into wrangl
 npx wrangler r2 bucket create kanryo-files
 npm run migrate:remote
 npm run deploy
-npx wrangler secret put APP_PASSWORD   # what you log in with
+npx wrangler secret put APP_PASSWORD   # what you log in with, 12+ characters
 npx wrangler secret put AUTH_SECRET    # any long random string
 npx wrangler secret put KANRYO_TOKEN   # long random string, used by Claude
 ```
@@ -285,12 +286,23 @@ Deleted tasks leave a tombstone so their event still gets cleaned up.
 ```bash
 cp .dev.vars.example .dev.vars   # local secrets; the login password is "dev"
 npm run migrate:local            # create the local database
-npm run dev                      # vite plus the worker against the local D1
+npm run dev                      # vite plus the worker against the local D1, http://localhost:5173
 npm test                         # vitest
 npm run check                    # typecheck
+npm run build                    # typecheck plus production build into dist/
 ```
 
 The dev server uses a local database, so seed it with whatever nonsense you like.
+
+### Verify a fresh clone
+
+```bash
+npm install && npm test && npm run build
+```
+
+Expect `88 passed` from the tests and a `dist/` folder from the build. No
+Cloudflare account is needed for this; the D1 id in `wrangler.jsonc` is a
+placeholder until `npm run setup` writes yours.
 
 ## Who this is for
 
